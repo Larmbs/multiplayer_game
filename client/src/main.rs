@@ -13,7 +13,9 @@ use client::Client;
 use render::Render;
 
 pub struct GameRuntime {
-    /// Inbox of messages from the server
+    /* Inbox of messages from the server */
+    /// Async context
+    runtime: tokio::runtime::Runtime,
     server_rx: UnboundedReceiver<ServerMessage>,
     server_tx: UnboundedSender<ClientMessage>,
 
@@ -27,6 +29,11 @@ pub struct GameRuntime {
 }
 impl GameRuntime {
     fn init() -> Result<Self> {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to build Tokio runtime");
+
         // For communication of world updates from the server to the client
         let (runtime_tx, server_rx) = unbounded_channel();
 
@@ -37,7 +44,7 @@ impl GameRuntime {
         let cli = Cli::parse();
 
         let client = Client::connect(cli.address, runtime_tx, runtime_rx);
-        tokio::spawn(async move {
+        runtime.spawn(async move {
             match client.await {
                 Ok(mut client) => {
                     let _ = client.listen().await;
@@ -49,14 +56,12 @@ impl GameRuntime {
         });
 
         let world = World::new();
-
         let mut ctx: Box<dyn RenderingBackend> = window::new_rendering_backend();
-
         let render = Render::init(&mut *ctx);
-
         let time = miniquad::date::now();
 
         Ok(Self {
+            runtime,
             server_rx,
             server_tx,
             world,
@@ -73,6 +78,13 @@ impl EventHandler for GameRuntime {
         self.last_frame = time;
 
         self.world.update(dt);
+        
+        // Example: read incoming server messages (non-blocking)
+        while let Ok(msg) = self.server_rx.try_recv() {
+            // Handle ServerMessage
+            // e.g., self.world.apply_server_update(msg);
+            println!("Received ServerMessage: {:?}", msg);
+        }
     }
 
     fn draw(&mut self) {
@@ -82,8 +94,11 @@ impl EventHandler for GameRuntime {
 }
 
 fn main() {
+    let cli = Cli::parse();
+
     let mut conf = conf::Conf::default();
-    let metal = std::env::args().nth(1).as_deref() == Some("metal");
+
+    let metal = cli.metal;
     conf.platform.apple_gfx_api = if metal {
         conf::AppleGfxApi::Metal
     } else {

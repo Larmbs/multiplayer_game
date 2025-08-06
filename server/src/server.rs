@@ -5,6 +5,7 @@
 //! This module defines the main `Server` structure, a per-client
 //! `ClientHandle`, and a `ServerCommand` enum for internal coordination.
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use tokio::select;
@@ -13,7 +14,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
 use crate::cli::ServerConfig;
 use common::message::{ClientMessage, ServerMessage};
-use common::world::World;
+use common::world::{Player, World};
 
 /// Commands sent from client handlers to the central server.
 ///
@@ -30,14 +31,15 @@ enum ServerCommand {
 /// The server listens for incoming TCP connections, spawns a handler
 /// for each client, and coordinates internal commands via an unbounded channel.
 pub struct Server {
-    server_config: ServerConfig,
+    player_id_counter: Arc<AtomicU64>,
+    server_config: Arc<ServerConfig>,
     listener: TcpListener,
-    clients: Arc<Mutex<Vec<UnboundedSender<ServerMessage>>>>,
-    command_receiver: UnboundedReceiver<ServerCommand>,
-    command_sender: UnboundedSender<ServerCommand>,
+    client_txs: Arc<Mutex<Vec<UnboundedSender<ServerMessage>>>>,
+    command_rx: UnboundedReceiver<ServerCommand>,
+    command_tx: UnboundedSender<ServerCommand>,
 
     // Shared data about game world
-    world: Arc<Mutex<World>>, 
+    world: Arc<Mutex<World>>,
 }
 
 impl Server {
@@ -49,13 +51,14 @@ impl Server {
         let (tx, rx) = unbounded_channel();
 
         Ok(Self {
-            server_config,
+            server_config: Arc::new(server_config),
             listener,
-            clients: Arc::new(Mutex::new(vec![])),
-            command_receiver: rx,
-            command_sender: tx,
+            client_txs: Arc::new(Mutex::new(vec![])),
+            command_rx: rx,
+            command_tx: tx,
 
             world: Arc::new(Mutex::new(World::new())),
+            player_id_counter: Arc::new(AtomicU64::new(1)),
         })
     }
 
@@ -72,12 +75,13 @@ impl Server {
                 Ok((stream, addr)) = self.listener.accept() => {
                     println!("New client: {}", addr);
 
-                    if self.clients.lock().await.len() < self.server_config.max_clients {
+                    if self.client_txs.lock().await.len() < self.server_config.max_clients {
                         let (tx_to_client, rx_for_client) = unbounded_channel::<ServerMessage>();
-                        let client_command_sender = self.command_sender.clone();
-                        self.clients.lock().await.push(tx_to_client.clone());
+                        let client_command_sender = self.command_tx.clone();
+                        self.client_txs.lock().await.push(tx_to_client.clone());
 
-                        let mut client = ClientHandle::new(stream, client_command_sender, rx_for_client);
+                        let mut client = ClientHandle::new(self.player_id_counter.clone(),
+                        self.server_config.clone(), stream, client_command_sender, rx_for_client, self.world.clone());
 
                         tokio::spawn(async move {
                             if let Err(e) = client.handle().await {
@@ -87,16 +91,16 @@ impl Server {
                     }
                 }
 
-                Some(cmd) = self.command_receiver.recv() => {
+                Some(cmd) = self.command_rx.recv() => {
                     match cmd {
                         ServerCommand::Broadcast(msg) => {
-                            let clients = self.clients.lock().await;
+                            let clients = self.client_txs.lock().await;
                             for tx in clients.iter() {
                                 let _ = tx.send(msg.clone());
                             }
                         }
                         ServerCommand::PingAll => {
-                            let clients = self.clients.lock().await;
+                            let clients = self.client_txs.lock().await;
                             for tx in clients.iter() {
                                 let _ = tx.send(ServerMessage::Ping);
                             }
@@ -113,20 +117,39 @@ impl Server {
 /// Each connected client has a dedicated `ClientHandle` which reads messages
 /// from the TCP stream, sends commands to the server, and listens for server messages.
 struct ClientHandle {
+    player_id_counter: Arc<AtomicU64>,
+    client_id: Option<u64>,
+
+    // Reference to server config variables
+    server_config: Arc<ServerConfig>,
+
     stream: TcpStream,
     // Sends a ServerCommand to the server to execute it
     tx: UnboundedSender<ServerCommand>,
     // Receives a server message to send to the client
     rx: UnboundedReceiver<ServerMessage>,
+
+    world: Arc<Mutex<World>>,
 }
 
 impl ClientHandle {
     fn new(
+        player_id_counter: Arc<AtomicU64>,
+        server_config: Arc<ServerConfig>,
         stream: TcpStream,
         tx: UnboundedSender<ServerCommand>,
         rx: UnboundedReceiver<ServerMessage>,
+        world: Arc<Mutex<World>>,
     ) -> Self {
-        Self { stream, tx, rx }
+        Self {
+            server_config,
+            player_id_counter,
+            client_id: None,
+            stream,
+            tx,
+            rx,
+            world,
+        }
     }
 
     async fn handle(&mut self) -> anyhow::Result<()> {
@@ -145,16 +168,43 @@ impl ClientHandle {
                     let (client_message, _len) = ClientMessage::decode(received)?;
 
                     match client_message {
-                        ClientMessage::Ping => {
-                            let _ = self.tx.send(ServerCommand::PingAll); // Or custom logic
+                        ClientMessage::Ping=>{
+                            let _ = self.tx.send(ServerCommand::PingAll);
                         },
-                        // Do nothing client has already been accepted
-                        ClientMessage::Connect(_, _) => (),
-                        ClientMessage::NotifyUpdatePlayer(player) => {
+                        ClientMessage::Connect(username, password) => {
+                            if self.server_config.password.is_none() || password == self.server_config.password.clone().unwrap() {
+                                let new_id = self.player_id_counter.fetch_add(1, Ordering::Relaxed);
+                            let new_player = Player {
+                                id: new_id,
+                                username,
+                                x: 0.0,
+                                y: 0.0,
+                                vx: 0.0,
+                                vy: 0.0,
+                            };
 
+                            {
+                                let mut world = self.world.lock().await;
+                                world.update_player(new_player);
+                            }
+                            self.client_id = Some(new_id);
+                            }
+                            // Send ConnectionAccepted with player ID if needed
+                    },
+                        ClientMessage::NotifyUpdatePlayer(player)=>{
+                            // Update the player in the world state
+                            let mut world = self.world.lock().await;
+                            world.update_player(player);
+
+                            // Broadcast updated players to all clients
+                            let players = world.get_all_players().clone();
+                            let msg = ServerMessage::UpdatePlayers(players);
+
+                            let _ = self.tx.send(ServerCommand::Broadcast(msg));
                         },
-                        ClientMessage::NotifyShot(player) => {
-
+                        ClientMessage::NotifyShot(player)=>{},
+                        ClientMessage::Disconnect => {
+                            break;
                         },
                     }
                 }

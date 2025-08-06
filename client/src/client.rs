@@ -1,3 +1,4 @@
+use anyhow::Result;
 use common::message::{ClientMessage, ServerMessage};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpStream, ToSocketAddrs};
@@ -18,7 +19,11 @@ impl Client {
     ) -> anyhow::Result<Self> {
         let stream = TcpStream::connect(addr).await?;
         println!("Connected to {}", stream.peer_addr()?);
-        Ok(Self { stream, runtime_tx, runtime_rx })
+        Ok(Self {
+            stream,
+            runtime_tx,
+            runtime_rx,
+        })
     }
 
     // Send a client message to the server
@@ -28,26 +33,50 @@ impl Client {
         Ok(())
     }
 
-    // Listen for incoming messages from the server indefinitely
-    pub async fn listen(&mut self) -> anyhow::Result<()> {
-        let mut buf = [0u8; 1024];
+    pub async fn listen(&mut self) -> Result<()> {
+        let mut read_buf = [0u8; 4096];
+        let mut read_pos = 0;
+
         loop {
-            let n = self.stream.read(&mut buf).await?;
-            if n == 0 {
-                println!("Server closed connection");
-                break;
-            }
-            let received = &buf[..n];
-            match ServerMessage::decode(received) {
-                Ok((msg, _len)) => {
-                    println!("Received from server: {:?}", msg);
+            tokio::select! {
+                // 1) Read from the server
+                read_res = self.stream.read(&mut read_buf[read_pos..]) => {
+                    let n = read_res?;
+                    if n == 0 {
+                        println!("Server closed connection");
+                        break;
+                    }
+                    read_pos += n;
+
+                    // Try to decode as many ServerMessages as possible from buffer
+                    let mut offset = 0;
+                    while offset < read_pos {
+                        match ServerMessage::decode(&read_buf[offset..read_pos]) {
+                            Ok((msg, len)) => {
+                                self.runtime_tx.send(msg).ok(); // Ignore send errors (runtime dropped)
+                                offset += len;
+                            }
+                            Err(_) => {
+                                // Incomplete message? Wait for more bytes
+                                break;
+                            }
+                        }
+                    }
+
+                    // Remove consumed bytes from buffer by shifting remaining to start
+                    if offset > 0 {
+                        read_buf.copy_within(offset..read_pos, 0);
+                        read_pos -= offset;
+                    }
                 }
-                Err(e) => {
-                    eprintln!("Failed to decode server message: {:?}", e);
-                    break;
+
+                // 2) Receive outgoing messages from runtime and send to server
+                Some(msg) = self.runtime_rx.recv() => {
+                    self.send_message(msg).await?;
                 }
             }
         }
+
         Ok(())
     }
 }

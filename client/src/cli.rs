@@ -9,4 +9,7 @@ pub struct Cli {
 
     #[arg(long, default_value = details::DEFAULT_USER_NAME)]
     pub user_name: String,
+
+    #[arg(long)]
+    pub metal: bool,
 }

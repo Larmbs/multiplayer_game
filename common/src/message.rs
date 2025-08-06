@@ -15,7 +15,9 @@ use crate::world::{Player, Projectile};
 /// Messages that are sent from the Server to the Client 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Decode, Encode)]
 pub enum ServerMessage {
+    /* Connection handling */
     Ping,
+    Disconnect,
     ConnectionAccepted,
     PasswordFailed,
 
@@ -37,9 +39,11 @@ impl ServerMessage {
 /// Messages that are sent from the Client to the Server 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Decode, Encode)]
 pub enum ClientMessage {
-    Ping,
+    /* Connection handling */
     // Username, Password (If user name is duplicate it will assign you an new one)
     Connect(String, String),
+    Disconnect,
+    Ping,
 
     /* Notifies server of client updates */
     NotifyUpdatePlayer(Player),

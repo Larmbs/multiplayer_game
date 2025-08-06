@@ -1,171 +1,129 @@
 use miniquad::*;
 
-pub const VERTEX: &str = r#"#version 100
-    attribute vec2 in_pos;
-    attribute vec2 in_uv;
+pub const VERTEX: &str = r#"
+#version 100
+attribute vec2 in_pos;
+attribute vec2 in_uv;
+varying highp vec2 uv;
 
-    varying highp vec2 uv;
-
-    void main() {
-        gl_Position = vec4(in_pos, 0, 1);
-        uv = in_uv;
-    }"#;
+void main() {
+    gl_Position = vec4(in_pos, 0, 1);
+    uv = in_uv;
+}
+"#;
 
 pub const FRAGMENT: &str = r#"#version 100
-    precision highp float;
+precision highp float;
 
-    varying vec2 uv;
+varying vec2 uv;
 
-    uniform float time;
-    uniform int blobs_count;
-    uniform vec2 blobs_positions[32];
+uniform float time;
 
-    float k = 20.0;
-    float field = 0.0;
-    vec2 coord;
-        
-    void circle ( float r , vec3 col , vec2 offset) {
-        vec2 pos = coord.xy;
-        vec2 c = offset;
-        float d = distance ( pos , c );
-        field += ( k * r ) / ( d*d );
-    }
-        
-    vec3 band ( float shade, float low, float high, vec3 col1, vec3 col2 ) {
-        if ( (shade >= low) && (shade <= high) ) {
-            float delta = (shade - low) / (high - low);
-            vec3 colDiff = col2 - col1;
-            return col1 + (delta * colDiff);
+uniform int player_count;
+uniform vec2 players[16];
+uniform vec2 player_size;
+
+uniform int bullet_count;
+uniform vec2 bullets[32];
+uniform vec2 bullet_size;
+
+bool in_rect(vec2 p, vec2 center, vec2 half_size) {
+    return abs(p.x - center.x) <= half_size.x &&
+           abs(p.y - center.y) <= half_size.y;
+}
+
+void main() {
+    vec3 color = vec3(0.0);
+
+    vec2 half_player = player_size * 0.5;
+    vec2 half_bullet = bullet_size * 0.5;
+
+    for (int i = 0; i < 16; i++) {
+        if (i >= player_count) break;
+        if (in_rect(uv, players[i], half_player)) {
+            color = vec3(0.0, 0.5, 1.0); // Blue player
         }
-        else
-            return vec3(0.0,0.0,0.0);
     }
-    
-    vec3 gradient ( float shade ) {
-        vec3 colour = vec3( (sin(time/2.0)*0.25)+0.25,0.0,(cos(time/2.0)*0.25)+0.25);
-        
-        vec3 col1 = vec3(0.01, 0.0, 1.0-0.01);
-        vec3 col2 = vec3(1.0-0.01, 0.0, 0.01);
-        vec3 col3 = vec3(0.02, 1.0-0.02, 0.02);
-        vec3 col4 = vec3((0.01+0.02)/2.0, (0.01+0.02)/2.0, 1.0 - (0.01+0.02)/2.0);
-        vec3 col5 = vec3(0.02, 0.02, 0.02);
-        
-        colour += band ( shade, 0.0, 0.3, colour, col1 );
-        colour += band ( shade, 0.3, 0.6, col1, col2 );
-        colour += band ( shade, 0.6, 0.8, col2, col3 );
-        colour += band ( shade, 0.8, 0.9, col3, col4 );
-        colour += band ( shade, 0.9, 1.0, col4, col5 );
-        
-        return colour;
-    }
-    
-    void main() {
-        coord = uv;
-        
-        for (int i = 0; i < 32; i++) {
-            if (i >= blobs_count) { break; } // workaround for webgl error: Loop index cannot be compared with non-constant expression
-            circle(.03 , vec3(0.7 ,0.2, 0.8), blobs_positions[i]);
+
+    for (int i = 0; i < 32; i++) {
+        if (i >= bullet_count) break;
+        if (in_rect(uv, bullets[i], half_bullet)) {
+            color = vec3(1.0, 0.0, 0.0); // Red bullet
         }
-        
-        float shade = min ( 1.0, max ( field/256.0, 0.0 ) );
-        
-        gl_FragColor = vec4( gradient(shade), 1.0 );
-    }"#;
+    }
+
+    gl_FragColor = vec4(color, 1.0);
+}
+"#;
 
 pub const METAL: &str = r#"
-    #include <metal_stdlib>
+#include <metal_stdlib>
+using namespace metal;
 
-    using namespace metal;
+struct Uniforms {
+    float time;
 
-    struct Uniforms
-    {
-        float time;
-        int16_t blobs_count;
-        float2 blobs[32];
-    };
+    short player_count;
+    float2 players[16];
+    float2 player_size;
 
-    struct Vertex
-    {
-        float2 in_pos   [[attribute(0)]];
-        float2 in_uv    [[attribute(1)]];
-    };
+    short bullet_count;
+    float2 bullets[32];
+    float2 bullet_size;
+};
 
-    struct RasterizerData
-    {
-        float4 position [[position]];
-        float2 uv       [[user(locn0)]];
-    };
+struct Vertex {
+    float2 in_pos   [[attribute(0)]];
+    float2 in_uv    [[attribute(1)]];
+};
 
-    vertex RasterizerData vertexShader(
-      Vertex v [[stage_in]])
-    {
-        RasterizerData out;
+struct RasterizerData {
+    float4 position [[position]];
+    float2 uv       [[user(locn0)]];
+};
 
-        out.position = float4(v.in_pos.xy, 0.0, 1.0);
-        out.uv = v.in_uv;
+vertex RasterizerData vertexShader(Vertex v [[stage_in]]) {
+    RasterizerData out;
+    out.position = float4(v.in_pos.xy, 0.0, 1.0);
+    out.uv = v.in_uv;
+    return out;
+}
 
-        return out;
-    }
+bool in_rect(float2 p, float2 center, float2 half_size) {
+    return fabs(p.x - center.x) <= half_size.x &&
+           fabs(p.y - center.y) <= half_size.y;
+}
 
-    constant float k = 20.0;
-        
-    float circle(float2 coord, float r , float3 col , float2 offset) {
-        float2 pos = coord.xy;
-        float2 c = offset;
-        float d = distance ( pos , c );
-        return ( k * r ) / ( d*d );
-    }
-        
-    float3 band ( float shade, float low, float high, float3 col1, float3 col2 ) {
-        if ( (shade >= low) && (shade <= high) ) {
-            float delta = (shade - low) / (high - low);
-            float3 colDiff = col2 - col1;
-            return col1 + (delta * colDiff);
+fragment float4 fragmentShader(RasterizerData in [[stage_in]],
+                               constant Uniforms& u [[buffer(0)]]) {
+    float3 color = float3(0.0);
+
+    float2 half_player = u.player_size * 0.5;
+    float2 half_bullet = u.bullet_size * 0.5;
+
+    for (int i = 0; i < 16; i++) {
+        if (i >= u.player_count) break;
+        if (in_rect(in.uv, u.players[i], half_player)) {
+            color = float3(0.0, 0.5, 1.0);
         }
-        else
-            return float3(0.0,0.0,0.0);
-    }
-    
-    float3 gradient (float shade, float time) {
-        float3 colour = float3( (sin(time/2.0)*0.25)+0.25,0.0,(cos(time/2.0)*0.25)+0.25);
-        
-        float3 col1 = float3(0.01, 0.0, 1.0-0.01);
-        float3 col2 = float3(1.0-0.01, 0.0, 0.01);
-        float3 col3 = float3(0.02, 1.0-0.02, 0.02);
-        float3 col4 = float3((0.01+0.02)/2.0, (0.01+0.02)/2.0, 1.0 - (0.01+0.02)/2.0);
-        float3 col5 = float3(0.02, 0.02, 0.02);
-        
-        colour += band ( shade, 0.0, 0.3, colour, col1 );
-        colour += band ( shade, 0.3, 0.6, col1, col2 );
-        colour += band ( shade, 0.6, 0.8, col2, col3 );
-        colour += band ( shade, 0.8, 0.9, col3, col4 );
-        colour += band ( shade, 0.9, 1.0, col4, col5 );
-        
-        return colour;
     }
 
-    fragment float4 fragmentShader(RasterizerData in [[stage_in]], constant Uniforms& uniforms [[buffer(0)]])
-    {
-        float field = 0.0;
-        for (int i = 0; i < 32; i++) {
-            if (i >= uniforms.blobs_count) { break; } // workaround for webgl error: Loop index cannot be compared with non-constant expression
-            field += circle(in.uv, .03 , float3(0.7 ,0.2, 0.8), uniforms.blobs[i]);
+    for (int i = 0; i < 32; i++) {
+        if (i >= u.bullet_count) break;
+        if (in_rect(in.uv, u.bullets[i], half_bullet)) {
+            color = float3(1.0, 0.0, 0.0);
         }
-        
-        float shade = min ( 1.0, max(field/256.0, 0.0 ) );
-        
-        return float4(gradient(shade, uniforms.time), 1.0 );
-    }"#;
+    }
+
+    return float4(color, 1.0);
+}
+"#;
 
 pub fn meta() -> ShaderMeta {
     ShaderMeta {
         images: vec![],
         uniforms: UniformBlockLayout {
-            uniforms: vec![
-                UniformDesc::new("time", UniformType::Float1),
-                UniformDesc::new("blobs_count", UniformType::Int1),
-                UniformDesc::new("blobs_positions", UniformType::Float2).array(32),
-            ],
+            uniforms: vec![UniformDesc::new("time", UniformType::Float1)],
         },
     }
 }
@@ -173,6 +131,12 @@ pub fn meta() -> ShaderMeta {
 #[repr(C)]
 pub struct Uniforms {
     pub time: f32,
-    pub blobs_count: i32,
-    pub blobs_positions: [(f32, f32); 32],
+
+    pub player_count: i16,
+    pub players: [(f32, f32); 3],
+    pub player_size: (f32, f32),
+
+    pub bullet_count: i16,
+    pub bullets: [(f32, f32); 3],
+    pub bullet_size: (f32, f32),
 }

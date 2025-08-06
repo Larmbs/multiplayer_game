@@ -1,4 +1,6 @@
 use miniquad::*;
+
+use crate::render::shader::Uniforms;
 mod shader;
 
 #[repr(C)]
@@ -15,6 +17,8 @@ struct Vertex {
 pub struct Render {
     pipeline: Pipeline,
     bindings: Bindings,
+    uniforms: Uniforms,
+    start_time: f64,
 }
 impl Render {
     pub fn init(ctx: &mut dyn RenderingBackend) -> Self {
@@ -59,6 +63,16 @@ impl Render {
             )
             .unwrap();
 
+        let uniforms = shader::Uniforms {
+            time: 0.,
+            player_count: 3,
+            players: [(0.0, 0.0), (10.0, 0.0), (0.0, 5.0)],
+            player_size: (30.0, 30.0),
+            bullet_count: 3,
+            bullets: [(7.0, 0.0), (-10.0, 0.0), (0.0, -5.0)],
+            bullet_size: (10.0, 10.0),
+        };
+
         let pipeline = ctx.new_pipeline(
             &[BufferLayout::default()],
             &[
@@ -69,13 +83,23 @@ impl Render {
             PipelineParams::default(),
         );
 
-        Self { pipeline, bindings }
+        let start_time = miniquad::date::now();
+
+        Self {
+            pipeline,
+            bindings,
+            uniforms,
+            start_time,
+        }
     }
 
     pub fn draw(&mut self, ctx: &mut dyn RenderingBackend) {
+        self.uniforms.time = (miniquad::date::now() - self.start_time) as f32;
+
         ctx.begin_default_pass(PassAction::clear_color(0.1, 0.1, 0.1, 1.0));
         ctx.apply_pipeline(&self.pipeline);
         ctx.apply_bindings(&self.bindings);
+        ctx.apply_uniforms(UniformsSource::table(&self.uniforms));
         ctx.draw(0, 3, 1); // 3 vertices = 1 triangle
         ctx.end_render_pass();
     }
