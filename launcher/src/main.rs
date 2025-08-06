@@ -1,0 +1,143 @@
+use eframe::egui::{self, Align, CentralPanel, Context, Layout, RichText};
+use local_ip_address::local_ip;
+use std::process::Stdio;
+use tokio::process::{Child, Command};
+
+#[tokio::main]
+async fn main() -> eframe::Result<()> {
+    let options = eframe::NativeOptions::default();
+    eframe::run_native(
+        "Battle Game Launcher",
+        options,
+        Box::new(|_cc| Ok(Box::new(LauncherApp::default()))),
+    )
+}
+
+#[derive(Default)]
+struct LauncherApp {
+    state: LauncherState,
+    addr_input: String,
+    server_process: Option<Child>,
+    client_process: Option<Child>,
+}
+
+#[derive(Default)]
+enum LauncherState {
+    #[default]
+    MainMenu,
+    MultiplayerMenu,
+    Launching,
+}
+
+impl eframe::App for LauncherApp {
+    fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
+        CentralPanel::default().show(ctx, |ui| {
+            ui.with_layout(Layout::top_down_justified(Align::Center), |ui| {
+                ui.add_space(20.0);
+                ui.label(RichText::new("⚔️ Battle Game Launcher ⚔️").heading().size(28.0));
+
+                ui.add_space(20.0);
+
+                match self.state {
+                    LauncherState::MainMenu => {
+                        ui.label("Choose your game mode:");
+
+                        ui.add_space(10.0);
+                        if ui.add(egui::Button::new("🎮 Single Player").min_size([200.0, 40.0].into())).clicked() {
+                            let addr = "127.0.0.1:8000";
+                            self.server_process = launch_server(addr);
+                            self.client_process = launch_client(addr);
+                            self.state = LauncherState::Launching;
+                        }
+
+                        ui.add_space(5.0);
+                        if ui.add(egui::Button::new("🌐 Multiplayer").min_size([200.0, 40.0].into())).clicked() {
+                            self.state = LauncherState::MultiplayerMenu;
+                        }
+                    }
+
+                    LauncherState::MultiplayerMenu => {
+                        ui.label(RichText::new("Multiplayer Options").strong().size(20.0));
+                        ui.add_space(10.0);
+
+                        if let Ok(local_addr) = local_ip() {
+                            ui.label(format!("Your Local IP: {}", local_addr));
+                        }
+
+                        ui.add_space(10.0);
+                        if ui.add(egui::Button::new("🛠 Host Game").min_size([200.0, 40.0].into())).clicked() {
+                            let addr = format!("{}:8000", local_ip().unwrap());
+                            self.server_process = launch_server(&addr);
+                            self.client_process = launch_client(&addr);
+                            self.state = LauncherState::Launching;
+                        }
+
+                        ui.add_space(10.0);
+                        ui.horizontal(|ui| {
+                            ui.label("Join Address:");
+                            ui.text_edit_singleline(&mut self.addr_input);
+                        });
+
+                        ui.add_space(5.0);
+                        if ui.add(egui::Button::new("🔗 Join Game").min_size([200.0, 40.0].into())).clicked() {
+                            self.client_process = launch_client(&self.addr_input);
+                            self.state = LauncherState::Launching;
+                        }
+
+                        ui.add_space(20.0);
+                        if ui.button("⬅ Back").clicked() {
+                            self.state = LauncherState::MainMenu;
+                        }
+                    }
+
+                    LauncherState::Launching => {
+                        ui.label(RichText::new("🚀 Game is launching...").size(20.0));
+                        ui.add_space(10.0);
+                        ui.label("You can close this launcher or stop the server/client below.");
+
+                        ui.add_space(20.0);
+                        if ui.add(egui::Button::new("⛔ Stop Game").min_size([150.0, 40.0].into())).clicked() {
+                            stop_processes(self);
+                            self.state = LauncherState::MainMenu;
+                        }
+                    }
+                }
+            });
+        });
+    }
+}
+
+impl Drop for LauncherApp {
+    fn drop(&mut self) {
+        stop_processes(self);
+    }
+}
+
+fn stop_processes(app: &mut LauncherApp) {
+    if let Some(child) = &mut app.client_process {
+        let _ = child.start_kill();
+    }
+    if let Some(child) = &mut app.server_process {
+        let _ = child.start_kill();
+    }
+    app.client_process = None;
+    app.server_process = None;
+}
+
+fn launch_server(addr: &str) -> Option<Child> {
+    Command::new("target/release/server")
+        .args([addr])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()
+}
+
+fn launch_client(addr: &str) -> Option<Child> {
+    Command::new("target/release/client")
+        .args([addr])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()
+}
