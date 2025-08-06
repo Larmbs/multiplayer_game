@@ -1,13 +1,13 @@
+use common::details;
 use eframe::egui::{self, Align, CentralPanel, Context, Layout, RichText};
 use local_ip_address::local_ip;
 use std::process::Stdio;
 use tokio::process::{Child, Command};
-
 #[tokio::main]
 async fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions::default();
     eframe::run_native(
-        "Battle Game Launcher",
+        &format!("{} Launcher", details::GAME_NAME),
         options,
         Box::new(|_cc| Ok(Box::new(LauncherApp::default()))),
     )
@@ -34,7 +34,11 @@ impl eframe::App for LauncherApp {
         CentralPanel::default().show(ctx, |ui| {
             ui.with_layout(Layout::top_down_justified(Align::Center), |ui| {
                 ui.add_space(20.0);
-                ui.label(RichText::new("⚔️ Battle Game Launcher ⚔️").heading().size(28.0));
+                ui.label(
+                    RichText::new(&format!("{} Launcher", details::GAME_NAME))
+                        .heading()
+                        .size(28.0),
+                );
 
                 ui.add_space(20.0);
 
@@ -43,15 +47,24 @@ impl eframe::App for LauncherApp {
                         ui.label("Choose your game mode:");
 
                         ui.add_space(10.0);
-                        if ui.add(egui::Button::new("🎮 Single Player").min_size([200.0, 40.0].into())).clicked() {
-                            let addr = "127.0.0.1:8000";
+                        if ui
+                            .add(
+                                egui::Button::new("🎮 Single Player")
+                                    .min_size([200.0, 40.0].into()),
+                            )
+                            .clicked()
+                        {
+                            let addr = &format!("127.0.0.1:{}", details::DEFAULT_PORT);
                             self.server_process = launch_server(addr);
                             self.client_process = launch_client(addr);
                             self.state = LauncherState::Launching;
                         }
 
                         ui.add_space(5.0);
-                        if ui.add(egui::Button::new("🌐 Multiplayer").min_size([200.0, 40.0].into())).clicked() {
+                        if ui
+                            .add(egui::Button::new("🌐 Multiplayer").min_size([200.0, 40.0].into()))
+                            .clicked()
+                        {
                             self.state = LauncherState::MultiplayerMenu;
                         }
                     }
@@ -65,8 +78,11 @@ impl eframe::App for LauncherApp {
                         }
 
                         ui.add_space(10.0);
-                        if ui.add(egui::Button::new("🛠 Host Game").min_size([200.0, 40.0].into())).clicked() {
-                            let addr = format!("{}:8000", local_ip().unwrap());
+                        if ui
+                            .add(egui::Button::new("🛠 Host Game").min_size([200.0, 40.0].into()))
+                            .clicked()
+                        {
+                            let addr = format!("{}:{}", local_ip().unwrap(), details::DEFAULT_PORT);
                             self.server_process = launch_server(&addr);
                             self.client_process = launch_client(&addr);
                             self.state = LauncherState::Launching;
@@ -79,7 +95,10 @@ impl eframe::App for LauncherApp {
                         });
 
                         ui.add_space(5.0);
-                        if ui.add(egui::Button::new("🔗 Join Game").min_size([200.0, 40.0].into())).clicked() {
+                        if ui
+                            .add(egui::Button::new("🔗 Join Game").min_size([200.0, 40.0].into()))
+                            .clicked()
+                        {
                             self.client_process = launch_client(&self.addr_input);
                             self.state = LauncherState::Launching;
                         }
@@ -96,7 +115,10 @@ impl eframe::App for LauncherApp {
                         ui.label("You can close this launcher or stop the server/client below.");
 
                         ui.add_space(20.0);
-                        if ui.add(egui::Button::new("⛔ Stop Game").min_size([150.0, 40.0].into())).clicked() {
+                        if ui
+                            .add(egui::Button::new("⛔ Stop Game").min_size([150.0, 40.0].into()))
+                            .clicked()
+                        {
                             stop_processes(self);
                             self.state = LauncherState::MainMenu;
                         }

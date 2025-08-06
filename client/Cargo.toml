@@ -7,4 +7,6 @@ edition = "2024"
 anyhow = "1.0.98"
 tokio = { version = "1", features = ["full"] }
 common = { path = "../common" }
-macroquad = "0.4.14"
+clap = { version = "4.5.42", features = ["derive"] }
+miniquad = "0.4.8"
+bytemuck = "1.23.1"

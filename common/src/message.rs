@@ -10,10 +10,18 @@ use anyhow::Result;
 use bincode::{Decode, Encode, config};
 use serde::{Deserialize, Serialize};
 
-/// Messages that are sent from the Client to the Server 
+use crate::world::{Player, Projectile};
+
+/// Messages that are sent from the Server to the Client 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Decode, Encode)]
 pub enum ServerMessage {
     Ping,
+    ConnectionAccepted,
+    PasswordFailed,
+
+    /* Notifies players of world updates */
+    UpdatePlayers(Vec<Player>),
+    UpdateProjectiles(Vec<Projectile>),
 }
 impl ServerMessage {
     pub fn encode(&self) -> Result<Vec<u8>> {
@@ -30,6 +38,12 @@ impl ServerMessage {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Decode, Encode)]
 pub enum ClientMessage {
     Ping,
+    // Username, Password (If user name is duplicate it will assign you an new one)
+    Connect(String, String),
+
+    /* Notifies server of client updates */
+    NotifyUpdatePlayer(Player),
+    NotifyShot(Projectile),
 }
 impl ClientMessage {
     pub fn encode(&self) -> Result<Vec<u8>> {

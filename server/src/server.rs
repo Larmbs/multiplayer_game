@@ -11,7 +11,9 @@ use tokio::select;
 use tokio::sync::Mutex;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
+use crate::cli::ServerConfig;
 use common::message::{ClientMessage, ServerMessage};
+use common::world::World;
 
 /// Commands sent from client handlers to the central server.
 ///
@@ -28,22 +30,32 @@ enum ServerCommand {
 /// The server listens for incoming TCP connections, spawns a handler
 /// for each client, and coordinates internal commands via an unbounded channel.
 pub struct Server {
+    server_config: ServerConfig,
     listener: TcpListener,
     clients: Arc<Mutex<Vec<UnboundedSender<ServerMessage>>>>,
     command_receiver: UnboundedReceiver<ServerCommand>,
     command_sender: UnboundedSender<ServerCommand>,
+
+    // Shared data about game world
+    world: Arc<Mutex<World>>, 
 }
 
 impl Server {
-    pub async fn init<T: ToSocketAddrs>(addr: T) -> anyhow::Result<Self> {
+    pub async fn init<T: ToSocketAddrs>(
+        addr: T,
+        server_config: ServerConfig,
+    ) -> anyhow::Result<Self> {
         let listener = TcpListener::bind(addr).await?;
         let (tx, rx) = unbounded_channel();
 
         Ok(Self {
+            server_config,
             listener,
             clients: Arc::new(Mutex::new(vec![])),
             command_receiver: rx,
             command_sender: tx,
+
+            world: Arc::new(Mutex::new(World::new())),
         })
     }
 
@@ -60,17 +72,19 @@ impl Server {
                 Ok((stream, addr)) = self.listener.accept() => {
                     println!("New client: {}", addr);
 
-                    let (tx_to_client, rx_for_client) = unbounded_channel::<ServerMessage>();
-                    let client_command_sender = self.command_sender.clone();
-                    self.clients.lock().await.push(tx_to_client.clone());
+                    if self.clients.lock().await.len() < self.server_config.max_clients {
+                        let (tx_to_client, rx_for_client) = unbounded_channel::<ServerMessage>();
+                        let client_command_sender = self.command_sender.clone();
+                        self.clients.lock().await.push(tx_to_client.clone());
 
-                    let mut client = ClientHandle::new(stream, client_command_sender, rx_for_client);
+                        let mut client = ClientHandle::new(stream, client_command_sender, rx_for_client);
 
-                    tokio::spawn(async move {
-                        if let Err(e) = client.handle().await {
-                            eprintln!("Client error: {:?}", e);
-                        }
-                    });
+                        tokio::spawn(async move {
+                            if let Err(e) = client.handle().await {
+                                eprintln!("Client error: {:?}", e);
+                            }
+                        });
+                    }
                 }
 
                 Some(cmd) = self.command_receiver.recv() => {
@@ -133,7 +147,15 @@ impl ClientHandle {
                     match client_message {
                         ClientMessage::Ping => {
                             let _ = self.tx.send(ServerCommand::PingAll); // Or custom logic
-                        }
+                        },
+                        // Do nothing client has already been accepted
+                        ClientMessage::Connect(_, _) => (),
+                        ClientMessage::NotifyUpdatePlayer(player) => {
+
+                        },
+                        ClientMessage::NotifyShot(player) => {
+
+                        },
                     }
                 }
 
