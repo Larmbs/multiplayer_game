@@ -22,7 +22,9 @@ pub struct Render {
     start_time: f64,
 }
 impl Render {
-    pub fn init(ctx: &mut dyn RenderingBackend) -> Self {
+    pub fn init() -> Self {
+        let mut ctx: Box<dyn RenderingBackend> = window::new_rendering_backend();
+
         #[rustfmt::skip]
         let vertices: [Vertex; 4] = [
             Vertex { pos : Vec2 { x: -1.0, y: -1.0 }, uv: Vec2 { x: 0., y: 0. } },
@@ -85,8 +87,6 @@ impl Render {
         );
 
         let start_time = miniquad::date::now();
-
-        let ctx: Box<dyn RenderingBackend> = window::new_rendering_backend();
 
         Self {
             ctx,

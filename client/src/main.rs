@@ -54,8 +54,7 @@ impl GameRuntime {
         });
 
         let world = World::new();
-        let mut ctx: Box<dyn RenderingBackend> = window::new_rendering_backend();
-        let render = Render::init(&mut *ctx);
+        let render = Render::init();
         let time = miniquad::date::now();
 
         Ok(Self {

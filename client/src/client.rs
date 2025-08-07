@@ -39,7 +39,10 @@ impl Client {
                     },
                 ))
             }
-            _ => {println!("Error"); Err(anyhow::anyhow!("Error"))},
+            _ => {
+                println!("Error");
+                Err(anyhow::anyhow!("Error"))
+            }
         }
     }
 
