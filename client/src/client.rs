@@ -22,34 +22,25 @@ impl Client {
         let mut stream = TcpStream::connect(addr).await?;
         println!("Connected to {}", stream.peer_addr()?);
 
-        let response_bytes = ClientMessage::Connect(username, password).encode()?;
-        stream.write_all(&response_bytes).await?;
-        // Read initial response (waiting for ConnectionAccepted)
-        let mut buf = [0u8; 1024];
-        let n = stream.read(&mut buf).await?;
+        ClientMessage::Connect(username, password)
+            .write_to_tcp_stream(&mut stream)
+            .await?;
 
-        if n == 0 {
-            anyhow::bail!("Server closed the connection");
-        }
-
-        let received = &buf[..n];
-        let (msg, _) = ServerMessage::decode(received)?;
-        let player_id = match msg {
+        let mut buffer = [0; 1024];
+        match ServerMessage::read_from_tcp_stream(&mut stream, &mut buffer).await? {
             ServerMessage::ConnectionAccepted(id) => {
-                println!("Connection accepted. Player ID: {}", id);
-                id
+                println!("HI");
+                Ok((
+                    id,
+                    Self {
+                        stream,
+                        runtime_tx,
+                        runtime_rx,
+                    },
+                ))
             }
-            other => anyhow::bail!("Expected ConnectionAccepted, got: {:?}", other),
-        };
-
-        Ok((
-            player_id,
-            Self {
-                stream,
-                runtime_tx,
-                runtime_rx,
-            },
-        ))
+            _ => {println!("Error"); Err(anyhow::anyhow!("Error"))},
+        }
     }
 
     // Send a client message to the server

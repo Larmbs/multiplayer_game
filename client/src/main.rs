@@ -2,7 +2,9 @@ use anyhow::Result;
 use clap::Parser;
 use common::message::{ClientMessage, ServerMessage};
 use common::world::World;
+use miniquad::conf::Conf;
 use miniquad::*;
+use tokio::runtime::Runtime;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
 mod cli;
@@ -23,31 +25,31 @@ pub struct GameRuntime {
     world: World,
 
     /* Rendering related */
-    ctx: Box<dyn RenderingBackend>,
     render: Render,
+
     last_frame: f64,
 
     player_id: u64,
     username: String,
 }
 impl GameRuntime {
-    async fn init() -> Result<Self> {
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .expect("Failed to build Tokio runtime");
-
-        // For communication of world updates from the server to the client
+    pub fn init(runtime: tokio::runtime::Runtime, cli: Cli) -> Result<Self> {
         let (runtime_tx, server_rx) = unbounded_channel();
-
-        // For communication of world updates from the client to the server
         let (server_tx, runtime_rx) = unbounded_channel();
 
-        // The game requires argument to start
-        let cli = Cli::parse();
+        let handle = runtime.handle().clone();
 
-        let (id, mut client) = Client::connect(cli.address, cli.username.clone(), cli.password.unwrap_or(String::new()), runtime_tx, runtime_rx).await?;
-        runtime.spawn(async move {
+        let (id, mut client) = runtime.block_on(Client::connect(
+            cli.address,
+            cli.username.clone(),
+            cli.password.unwrap_or_default(),
+            runtime_tx,
+            runtime_rx,
+        ))?;
+
+        // Spawn the network listener inside the given runtime
+        handle.spawn(async move {
+            // Create a client
             let _ = client.listen().await;
         });
 
@@ -55,13 +57,12 @@ impl GameRuntime {
         let mut ctx: Box<dyn RenderingBackend> = window::new_rendering_backend();
         let render = Render::init(&mut *ctx);
         let time = miniquad::date::now();
-        println!("Hello: {}", id);
+
         Ok(Self {
             _runtime: runtime,
             server_rx,
             server_tx,
             world,
-            ctx,
             render,
             last_frame: time,
             player_id: id,
@@ -92,8 +93,7 @@ impl EventHandler for GameRuntime {
     }
 
     fn draw(&mut self) {
-        self.render.draw(&mut *self.ctx);
-        self.ctx.commit_frame();
+        self.render.draw();
     }
 
     fn key_down_event(&mut self, keycode: KeyCode, _mods: KeyMods, _repeat: bool) {
@@ -132,10 +132,20 @@ impl EventHandler for GameRuntime {
     }
 }
 
+fn window_conf() -> Conf {
+    Conf {
+        window_title: "My Game".to_string(),
+        window_width: 800,
+        window_height: 600,
+        window_resizable: true, // Enable window resizing
+        ..Default::default()
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
 
-    let mut conf = conf::Conf::default();
+    let mut conf = window_conf();
 
     let metal = cli.metal;
     conf.platform.apple_gfx_api = if metal {
@@ -144,13 +154,9 @@ fn main() {
         conf::AppleGfxApi::OpenGl
     };
 
+    let runtime = Runtime::new().unwrap();
+
     miniquad::start(conf, move || {
-        // Run the async init in a temporary runtime
-        let runtime = tokio::runtime::Runtime::new().expect("Failed to create temp tokio runtime");
-
-        // Block on async GameRuntime::init()
-        let game_runtime = runtime.block_on(GameRuntime::init()).unwrap();
-
-        Box::new(game_runtime)
+        Box::new(GameRuntime::init(runtime, cli).unwrap())
     });
 }

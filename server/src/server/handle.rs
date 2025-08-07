@@ -49,7 +49,6 @@ impl ClientHandle {
 
     pub async fn handle(&mut self) -> anyhow::Result<()> {
         let mut buffer = [0; 1024];
-        println!("Step2");
 
         loop {
             select! {
@@ -60,8 +59,6 @@ impl ClientHandle {
                             let _ = self.tx.send(ServerCommand::Broadcast(ServerMessage::Ping));
                         },
                         (ClientMessage::Connect(username, password), None) => {
-                                                    println!("Step4");
-
                             if self.server_config.password.is_none() || password == self.server_config.password.clone().unwrap() {
                                 let new_id = self.player_id_counter.fetch_add(1, Ordering::Relaxed);
                             let new_player = Player {
@@ -77,7 +74,6 @@ impl ClientHandle {
                                 world.update_player(new_id, new_player);
 
                                 self.client_id = Some(new_id);
-
 
                                 let _ = ServerMessage::ConnectionAccepted(new_id).write_to_tcp_stream(&mut self.stream).await;
                             }

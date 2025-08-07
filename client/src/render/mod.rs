@@ -15,6 +15,7 @@ struct Vertex {
 }
 
 pub struct Render {
+    ctx: Box<dyn RenderingBackend>,
     pipeline: Pipeline,
     bindings: Bindings,
     uniforms: Uniforms,
@@ -85,22 +86,27 @@ impl Render {
 
         let start_time = miniquad::date::now();
 
+        let ctx: Box<dyn RenderingBackend> = window::new_rendering_backend();
+
         Self {
+            ctx,
             pipeline,
             bindings,
             uniforms,
             start_time,
         }
     }
-
-    pub fn draw(&mut self, ctx: &mut dyn RenderingBackend) {
+    pub fn draw(&mut self) {
         self.uniforms.time = (miniquad::date::now() - self.start_time) as f32;
 
-        ctx.begin_default_pass(PassAction::clear_color(0.1, 0.1, 0.1, 1.0));
-        ctx.apply_pipeline(&self.pipeline);
-        ctx.apply_bindings(&self.bindings);
-        ctx.apply_uniforms(UniformsSource::table(&self.uniforms));
-        ctx.draw(0, 3, 1); // 3 vertices = 1 triangle
-        ctx.end_render_pass();
+        self.ctx
+            .begin_default_pass(PassAction::clear_color(0.7, 0.1, 0.1, 1.0));
+        self.ctx.apply_pipeline(&self.pipeline);
+        self.ctx.apply_bindings(&self.bindings);
+        self.ctx
+            .apply_uniforms(UniformsSource::table(&self.uniforms));
+        self.ctx.draw(0, 6, 1); // 3 vertices = 1 triangle
+        self.ctx.end_render_pass();
+        self.ctx.commit_frame();
     }
 }

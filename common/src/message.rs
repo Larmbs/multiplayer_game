@@ -44,8 +44,6 @@ impl ServerMessage {
 impl ServerMessage {
     pub async fn write_to_tcp_stream(&self, stream: &mut TcpStream) -> anyhow::Result<()> {
         let encoded = self.encode()?;
-        let len = encoded.len() as u32;
-        stream.write_u32(len).await?;
         stream.write_all(&encoded).await?;
         Ok(())
     }
@@ -89,8 +87,6 @@ impl ClientMessage {
 impl ClientMessage {
     pub async fn write_to_tcp_stream(&self, stream: &mut TcpStream) -> anyhow::Result<()> {
         let encoded = self.encode()?;
-        let len = encoded.len() as u32;
-        stream.write_u32(len).await?;
         stream.write_all(&encoded).await?;
         Ok(())
     }
