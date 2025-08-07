@@ -6,10 +6,7 @@
 //! binary communication. Each message type implements `encode` and `decode` methods
 //! to handle this serialization logic.
 
-use std::{
-    collections::HashMap,
-    io::{Read, Write},
-};
+use std::collections::HashMap;
 
 use anyhow::Result;
 use bincode::{Decode, Encode, config};
@@ -52,7 +49,10 @@ impl ServerMessage {
         stream.write_all(&encoded).await?;
         Ok(())
     }
-    pub async fn read_from_tcp_stream(stream: &mut TcpStream, buffer: &mut [u8; 1024]) -> anyhow::Result<Self> {
+    pub async fn read_from_tcp_stream(
+        stream: &mut TcpStream,
+        buffer: &mut [u8; 1024],
+    ) -> anyhow::Result<Self> {
         let size = stream.read(buffer).await?;
         if size == 0 {
             Ok(ServerMessage::Disconnect)
@@ -95,7 +95,10 @@ impl ClientMessage {
         Ok(())
     }
 
-    pub async fn read_from_tcp_stream(stream: &mut TcpStream, buffer: &mut [u8; 1024]) -> anyhow::Result<Self> {
+    pub async fn read_from_tcp_stream(
+        stream: &mut TcpStream,
+        buffer: &mut [u8; 1024],
+    ) -> anyhow::Result<Self> {
         let size = stream.read(buffer).await?;
         if size == 0 {
             Ok(ClientMessage::Disconnect)

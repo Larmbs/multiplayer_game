@@ -62,7 +62,15 @@ pub fn meta() -> ShaderMeta {
     ShaderMeta {
         images: vec![],
         uniforms: UniformBlockLayout {
-            uniforms: vec![UniformDesc::new("time", UniformType::Float1)],
+            uniforms: vec![
+                UniformDesc::new("time", UniformType::Float1),
+                UniformDesc::new("player_count", UniformType::Int1),
+                UniformDesc::new("players", UniformType::Float2).array(3),
+                UniformDesc::new("player_size", UniformType::Float2),
+                UniformDesc::new("bullet_count", UniformType::Int1),
+                UniformDesc::new("bullets", UniformType::Float2).array(3),
+                UniformDesc::new("bullet_size", UniformType::Float2),
+            ],
         },
     }
 }
