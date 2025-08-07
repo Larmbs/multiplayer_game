@@ -117,9 +117,10 @@ impl EventHandler for GameRuntime {
             _ => return,
         }
 
+        let self_player = self.world.get_all_players().get(&self.player_id).unwrap();
         let player = Player {
-            x: 0.0, // Client doesn't know its true position yet
-            y: 0.0,
+            x: self_player.x, // Client doesn't know its true position yet
+            y: self_player.y,
             vx,
             vy,
             username: self.username.clone(),
