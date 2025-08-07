@@ -7,8 +7,11 @@ use common::details;
 pub struct Cli {
     pub address: String,
 
-    #[arg(long, default_value = details::DEFAULT_USER_NAME)]
-    pub user_name: String,
+    #[arg(long, default_value = details::DEFAULT_USERNAME)]
+    pub username: String,
+
+    #[arg(long, default_value = None)]
+    pub password: Option<String>,
 
     #[arg(long)]
     pub metal: bool,

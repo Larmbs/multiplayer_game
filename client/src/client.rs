@@ -14,16 +14,42 @@ impl Client {
     // Connect to the server at the given address
     pub async fn connect<T: ToSocketAddrs>(
         addr: T,
+        username: String,
+        password: String,
         runtime_tx: UnboundedSender<ServerMessage>,
         runtime_rx: UnboundedReceiver<ClientMessage>,
-    ) -> anyhow::Result<Self> {
-        let stream = TcpStream::connect(addr).await?;
+    ) -> anyhow::Result<(u64, Self)> {
+        let mut stream = TcpStream::connect(addr).await?;
         println!("Connected to {}", stream.peer_addr()?);
-        Ok(Self {
-            stream,
-            runtime_tx,
-            runtime_rx,
-        })
+
+        let response_bytes = ClientMessage::Connect(username, password).encode()?;
+        stream.write_all(&response_bytes).await?;
+        // Read initial response (waiting for ConnectionAccepted)
+        let mut buf = [0u8; 1024];
+        let n = stream.read(&mut buf).await?;
+
+        if n == 0 {
+            anyhow::bail!("Server closed the connection");
+        }
+
+        let received = &buf[..n];
+        let (msg, _) = ServerMessage::decode(received)?;
+        let player_id = match msg {
+            ServerMessage::ConnectionAccepted(id) => {
+                println!("Connection accepted. Player ID: {}", id);
+                id
+            }
+            other => anyhow::bail!("Expected ConnectionAccepted, got: {:?}", other),
+        };
+
+        Ok((
+            player_id,
+            Self {
+                stream,
+                runtime_tx,
+                runtime_rx,
+            },
+        ))
     }
 
     // Send a client message to the server

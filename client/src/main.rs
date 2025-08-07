@@ -15,7 +15,7 @@ use render::Render;
 pub struct GameRuntime {
     /* Inbox of messages from the server */
     /// Async context
-    runtime: tokio::runtime::Runtime,
+    _runtime: tokio::runtime::Runtime,
     server_rx: UnboundedReceiver<ServerMessage>,
     server_tx: UnboundedSender<ClientMessage>,
 
@@ -26,9 +26,12 @@ pub struct GameRuntime {
     ctx: Box<dyn RenderingBackend>,
     render: Render,
     last_frame: f64,
+
+    player_id: u64,
+    username: String,
 }
 impl GameRuntime {
-    fn init() -> Result<Self> {
+    async fn init() -> Result<Self> {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
@@ -43,31 +46,26 @@ impl GameRuntime {
         // The game requires argument to start
         let cli = Cli::parse();
 
-        let client = Client::connect(cli.address, runtime_tx, runtime_rx);
+        let (id, mut client) = Client::connect(cli.address, cli.username.clone(), cli.password.unwrap_or(String::new()), runtime_tx, runtime_rx).await?;
         runtime.spawn(async move {
-            match client.await {
-                Ok(mut client) => {
-                    let _ = client.listen().await;
-                }
-                Err(e) => {
-                    eprintln!("Connection error: {:?}", e);
-                }
-            }
+            let _ = client.listen().await;
         });
 
         let world = World::new();
         let mut ctx: Box<dyn RenderingBackend> = window::new_rendering_backend();
         let render = Render::init(&mut *ctx);
         let time = miniquad::date::now();
-
+        println!("Hello: {}", id);
         Ok(Self {
-            runtime,
+            _runtime: runtime,
             server_rx,
             server_tx,
             world,
             ctx,
             render,
             last_frame: time,
+            player_id: id,
+            username: cli.username,
         })
     }
 }
@@ -78,18 +76,59 @@ impl EventHandler for GameRuntime {
         self.last_frame = time;
 
         self.world.update(dt);
-        
-        // Example: read incoming server messages (non-blocking)
+
+        // Receive world updates from server
         while let Ok(msg) = self.server_rx.try_recv() {
-            // Handle ServerMessage
-            // e.g., self.world.apply_server_update(msg);
-            println!("Received ServerMessage: {:?}", msg);
+            match msg {
+                ServerMessage::UpdatePlayers(players) => {
+                    self.world.set_players(players); // You'll need to implement this
+                }
+                ServerMessage::UpdateProjectiles(projectiles) => {
+                    self.world.set_projectiles(projectiles); // Implement this
+                }
+                _ => {}
+            }
         }
     }
 
     fn draw(&mut self) {
         self.render.draw(&mut *self.ctx);
         self.ctx.commit_frame();
+    }
+
+    fn key_down_event(&mut self, keycode: KeyCode, _mods: KeyMods, _repeat: bool) {
+        use common::message::ClientMessage;
+        use common::world::Player;
+
+        // Simulate movement based on key input
+        let mut vx = 0.0;
+        let mut vy = 0.0;
+
+        match keycode {
+            KeyCode::W => vy = -1.0,
+            KeyCode::S => vy = 1.0,
+            KeyCode::A => vx = -1.0,
+            KeyCode::D => vx = 1.0,
+            KeyCode::Space => {
+                // Simulate firing a projectile
+                let projectile = self.world.create_projectile(); // You write this
+                let _ = self.server_tx.send(ClientMessage::NotifyShot(projectile));
+                return;
+            }
+            _ => return,
+        }
+
+        let player = Player {
+            x: 0.0, // Client doesn't know its true position yet
+            y: 0.0,
+            vx,
+            vy,
+            username: self.username.clone(),
+        };
+
+        let _ = self
+            .server_tx
+            .send(ClientMessage::NotifyUpdatePlayer(player));
     }
 }
 
@@ -100,10 +139,18 @@ fn main() {
 
     let metal = cli.metal;
     conf.platform.apple_gfx_api = if metal {
-        conf::AppleGfxApi::Metal
+        panic!("Client does not support Mac");
     } else {
         conf::AppleGfxApi::OpenGl
     };
 
-    miniquad::start(conf, move || Box::new(GameRuntime::init().unwrap()));
+    miniquad::start(conf, move || {
+        // Run the async init in a temporary runtime
+        let runtime = tokio::runtime::Runtime::new().expect("Failed to create temp tokio runtime");
+
+        // Block on async GameRuntime::init()
+        let game_runtime = runtime.block_on(GameRuntime::init()).unwrap();
+
+        Box::new(game_runtime)
+    });
 }

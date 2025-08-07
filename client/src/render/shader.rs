@@ -56,68 +56,7 @@ void main() {
 }
 "#;
 
-pub const METAL: &str = r#"
-#include <metal_stdlib>
-using namespace metal;
-
-struct Uniforms {
-    float time;
-
-    short player_count;
-    float2 players[16];
-    float2 player_size;
-
-    short bullet_count;
-    float2 bullets[32];
-    float2 bullet_size;
-};
-
-struct Vertex {
-    float2 in_pos   [[attribute(0)]];
-    float2 in_uv    [[attribute(1)]];
-};
-
-struct RasterizerData {
-    float4 position [[position]];
-    float2 uv       [[user(locn0)]];
-};
-
-vertex RasterizerData vertexShader(Vertex v [[stage_in]]) {
-    RasterizerData out;
-    out.position = float4(v.in_pos.xy, 0.0, 1.0);
-    out.uv = v.in_uv;
-    return out;
-}
-
-bool in_rect(float2 p, float2 center, float2 half_size) {
-    return fabs(p.x - center.x) <= half_size.x &&
-           fabs(p.y - center.y) <= half_size.y;
-}
-
-fragment float4 fragmentShader(RasterizerData in [[stage_in]],
-                               constant Uniforms& u [[buffer(0)]]) {
-    float3 color = float3(0.0);
-
-    float2 half_player = u.player_size * 0.5;
-    float2 half_bullet = u.bullet_size * 0.5;
-
-    for (int i = 0; i < 16; i++) {
-        if (i >= u.player_count) break;
-        if (in_rect(in.uv, u.players[i], half_player)) {
-            color = float3(0.0, 0.5, 1.0);
-        }
-    }
-
-    for (int i = 0; i < 32; i++) {
-        if (i >= u.bullet_count) break;
-        if (in_rect(in.uv, u.bullets[i], half_bullet)) {
-            color = float3(1.0, 0.0, 0.0);
-        }
-    }
-
-    return float4(color, 1.0);
-}
-"#;
+pub const METAL: &str = r#""#;
 
 pub fn meta() -> ShaderMeta {
     ShaderMeta {

@@ -72,6 +72,7 @@ impl Server {
                         let mut client = ClientHandle::new(self.player_id_counter.clone(),
                         self.server_config.clone(), stream, client_command_sender, rx_for_client, self.world.clone());
 
+                        println!("Step1");
                         tokio::spawn(async move {
                             if let Err(e) = client.handle().await {
                                 eprintln!("Client error: {:?}", e);
@@ -94,3 +95,4 @@ impl Server {
         }
     }
 }
+

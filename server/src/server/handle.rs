@@ -7,9 +7,9 @@ use tokio::select;
 use tokio::sync::Mutex;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-use crate::cli::ServerConfig;
 use super::ServerCommand;
-use common::message::{ServerMessage, ClientMessage};
+use crate::cli::ServerConfig;
+use common::message::{ClientMessage, ServerMessage};
 use common::world::{Player, World};
 
 pub struct ClientHandle {
@@ -49,30 +49,23 @@ impl ClientHandle {
     }
 
     pub async fn handle(&mut self) -> anyhow::Result<()> {
-        let mut buf = [0; 1024];
+        let mut buffer = [0; 1024];
+        println!("Step2");
 
         loop {
             select! {
-                n = self.stream.read(&mut buf) => {
-                    let n = n?;
+                client_message = ClientMessage::read_from_tcp_stream(&mut self.stream, &mut buffer) => {
 
-                    if n == 0 {
-                        println!("Connection closed by peer");
-                        break;
-                    }
-
-                    let received = &buf[..n];
-                    let (client_message, _len) = ClientMessage::decode(received)?;
-
-                    match client_message {
-                        ClientMessage::Ping=>{
+                    match (client_message?, self.client_id) {
+                        (ClientMessage::Ping, _) =>{
                             let _ = self.tx.send(ServerCommand::Broadcast(ServerMessage::Ping));
                         },
-                        ClientMessage::Connect(username, password) => {
+                        (ClientMessage::Connect(username, password), None) => {
+                                                    println!("Step4");
+
                             if self.server_config.password.is_none() || password == self.server_config.password.clone().unwrap() {
                                 let new_id = self.player_id_counter.fetch_add(1, Ordering::Relaxed);
                             let new_player = Player {
-                                id: new_id,
                                 username,
                                 x: 0.0,
                                 y: 0.0,
@@ -80,18 +73,20 @@ impl ClientHandle {
                                 vy: 0.0,
                             };
 
-                            {
+
                                 let mut world = self.world.lock().await;
-                                world.update_player(new_player);
+                                world.update_player(new_id, new_player);
+
+                                self.client_id = Some(new_id);
+
+
+                                let _ = ServerMessage::ConnectionAccepted(new_id).write_to_tcp_stream(&mut self.stream).await;
                             }
-                            self.client_id = Some(new_id);
-                            }
-                            // Send ConnectionAccepted with player ID if needed
                     },
-                        ClientMessage::NotifyUpdatePlayer(player)=>{
+                        (ClientMessage::NotifyUpdatePlayer(player), Some(id)) =>{
                             // Update the player in the world state
                             let mut world = self.world.lock().await;
-                            world.update_player(player);
+                            world.update_player(id, player);
 
                             // Broadcast updated players to all clients
                             let players = world.get_all_players().clone();
@@ -99,16 +94,16 @@ impl ClientHandle {
 
                             let _ = self.tx.send(ServerCommand::Broadcast(msg));
                         },
-                        ClientMessage::NotifyShot(player)=>{},
-                        ClientMessage::Disconnect => {
+                        (ClientMessage::NotifyShot(player), Some(id)) =>{},
+                        (ClientMessage::Disconnect, Some(id)) => {
                             break;
                         },
+                        _ => (),
                     }
                 }
 
                 Some(msg) = self.rx.recv() => {
-                    let response_bytes = msg.encode()?;
-                    self.stream.write_all(&response_bytes).await?;
+                    let _ = msg.write_to_tcp_stream(&mut self.stream).await;
                 }
             }
         }

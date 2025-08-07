@@ -1,9 +1,10 @@
+use std::collections::HashMap;
+
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Decode, Encode)]
 pub struct Player {
-    pub id: u64,
     pub username: String,
     pub x: f32,
     pub y: f32,
@@ -33,20 +34,20 @@ impl Projectile {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Decode, Encode)]
 pub struct World {
-    players: Vec<Player>,
+    players: HashMap<u64, Player>,
     projectiles: Vec<Projectile>,
 }
 
 impl World {
     pub fn new() -> Self {
         Self {
-            players: Vec::new(),
+            players: HashMap::new(),
             projectiles: Vec::new(),
         }
     }
     pub fn update(&mut self, dt: f32) {
-        for i in 0..self.players.len() {
-            self.players[i].update(dt);
+        for (_, player) in &mut self.players {
+            player.update(dt);
         }
         for i in 0..self.projectiles.len() {
             self.projectiles[i].update(dt);
@@ -55,18 +56,35 @@ impl World {
 }
 
 impl World {
-    pub fn get_all_players(&self) -> &Vec<Player> {
+    pub fn get_all_players(&self) -> &HashMap<u64, Player> {
         &self.players
     }
-    pub fn update_player(&mut self, player: Player) {
-        if let Some(existing) = self.players.iter_mut().find(|p| p.id == player.id) {
+    pub fn update_player(&mut self, id: u64, player: Player) {
+        if let Some(existing) = self.players.get_mut(&id) {
             *existing = player;
         } else {
-            self.players.push(player);
+            self.players.insert(id, player);
         }
     }
 
     pub fn remove_player(&mut self, player_id: u64) {
-        self.players.retain(|p| p.id != player_id);
+        self.players.remove(&player_id);
+    }
+
+    pub fn set_players(&mut self, players: HashMap<u64, Player>) {
+        self.players = players;
+    }
+
+    pub fn set_projectiles(&mut self, projectiles: Vec<Projectile>) {
+        self.projectiles = projectiles;
+    }
+
+    pub fn create_projectile(&self) -> Projectile {
+        Projectile {
+            x: 0.0, // Fill in with logic for where projectile should spawn
+            y: 0.0,
+            vx: 0.0,
+            vy: -1.0,
+        }
     }
 }
