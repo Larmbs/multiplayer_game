@@ -1,0 +1,38 @@
+#!/bin/bash
+
+set -e
+
+# Paths
+CLIENT_DIR="client"
+SERVER_DIR="server"
+OUTPUT_DIR="./build"
+CLIENT_BUILD="target/release/client"
+SERVER_BUILD="target/release/server"
+
+# Clean previous output
+rm -rf "$OUTPUT_DIR"
+mkdir -p "$OUTPUT_DIR"
+
+echo "Building client..."
+cargo build --release --bin "$CLIENT_DIR"
+
+echo "Building server..."
+cargo build --release --bin "$SERVER_DIR"
+
+# Copy files and create zip for client
+mkdir -p "$OUTPUT_DIR/client/"
+cp "$CLIENT_BUILD" "$OUTPUT_DIR/client/"
+cp "$CLIENT_DIR/version.txt" "$OUTPUT_DIR/client/"
+cd "$OUTPUT_DIR/client"
+zip -r ./client.zip ./client*
+cd - > /dev/null
+
+# Copy files and create zip for server
+mkdir -p "$OUTPUT_DIR/server/"
+cp "$SERVER_BUILD" "$OUTPUT_DIR/server/"
+cp "$SERVER_DIR/version.txt" "$OUTPUT_DIR/server/"
+cd "$OUTPUT_DIR/server"
+zip -r ./server.zip ./server*
+cd - > /dev/null
+
+echo "✅ Build and packaging complete. Output in $OUTPUT_DIR"

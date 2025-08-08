@@ -1,28 +1,68 @@
 //! This binary is part of the multiplayer game project.
 //! It defines the main entry point for the game launcher, which provides a user interface for
 //! launching the game server and client, as well as options for single-player and multiplayer modes.
+use anyhow::Result;
 use common::details;
+use common::version::Version;
 use eframe::egui::{self, Align, CentralPanel, Context, Layout, RichText};
 use local_ip_address::local_ip;
-use std::process::Stdio;
+use std::{path::PathBuf, process::Stdio};
 use tokio::process::{Child, Command};
 
-#[derive(Default)]
-struct LauncherApp {
-    state: LauncherState,
-    addr_input: String,
-    server_process: Option<Child>,
-    client_process: Option<Child>,
-}
-
+/// Current launchers version number
+const LAUNCHER_VERSION: &str = env!("CARGO_PKG_VERSION");
+const VERSION_SERVERS: [&str; 1] =
+    ["https://drive.google.com/drive/folders/1IezcI1yue--XeAM4vQUGaJLL8iwJaxH-?usp=drive_link"];
 #[derive(Default)]
 enum LauncherState {
     #[default]
-    MainMenu,
-    MultiplayerMenu,
-    Launching,
+    Ready,
+    Failed,
+    DownloadGame,
+    DownloadingUpdate,
 }
 
+struct LauncherApp {
+    version: Version,
+    state: LauncherState,
+
+    addr_input: String,
+
+    root_path: PathBuf,
+    version_file: PathBuf,
+    game_zip: PathBuf,
+    game_exe: PathBuf,
+
+    server_process: Option<Child>,
+    client_process: Option<Child>,
+}
+impl LauncherApp {
+    fn new() -> Result<Self> {
+        // Current file path
+        let root_path = std::env::current_dir().unwrap();
+        let version_file = root_path.join("version.txt");
+        let game_zip = root_path.join("game.zip");
+        let game_exe = root_path.join("target/release/client");
+
+        Ok(LauncherApp {
+            version: Version::try_from(LAUNCHER_VERSION)?,
+            state: LauncherState::Ready,
+            addr_input: String::new(),
+            root_path,
+            version_file,
+            game_zip,
+            game_exe,
+            server_process: None,
+            client_process: None,
+        })
+    }
+    fn check_for_updates(&mut self) -> Result<(), String> {
+        todo!()
+    }
+    fn install_game_files(&mut self, is_update: bool) -> Result<(), String> {
+        todo!()
+    }
+}
 impl eframe::App for LauncherApp {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         CentralPanel::default().show(ctx, |ui| {
@@ -135,7 +175,7 @@ async fn main() -> eframe::Result<()> {
     eframe::run_native(
         &format!("{} Launcher", details::GAME_NAME),
         options,
-        Box::new(|_cc| Ok(Box::new(LauncherApp::default()))),
+        Box::new(|_cc| Ok(Box::new(LauncherApp::new()?))),
     )
 }
 
