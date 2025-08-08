@@ -1,18 +1,31 @@
 //! This binary is part of the multiplayer game project.
 //! It defines the main entry point for the game launcher, which provides a user interface for
 //! launching the game server and client, as well as options for single-player and multiplayer modes.
+//!
+//! Application structure
+//! This defines what the final structure of the application will look like once compiled.
+//!
+//! ├── build    // Will contain the binary files for the game and server as well as version files for each
+//! │   ├── client
+//! │   ├── server
+//! │   ├── client_version.txt
+//! │   └── server_version.txt
+//! ├── launcher
+//! ├── version.txt
+//!
+
 use anyhow::Result;
 use common::details;
 use common::version::Version;
 use eframe::egui::{self, Align, CentralPanel, Context, Layout, RichText};
 use local_ip_address::local_ip;
+use reqwest::Client;
 use std::{path::PathBuf, process::Stdio};
 use tokio::process::{Child, Command};
 
-/// Current launchers version number
-const LAUNCHER_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Different servers that serve game and server binaries
-const VERSION_SERVERS: [&str; 1] = ["https://github.com/Larmbs/multiplayer_game/tree/master/build"];
+const VERSION_SERVERS: [&str; 1] =
+    ["https://raw.githubusercontent.com/Larmbs/multiplayer_game/refs/heads/master/"];
 
 #[derive(Default)]
 enum LauncherState {
@@ -24,56 +37,50 @@ enum LauncherState {
 }
 
 struct LauncherApp {
-    version: Version,
     state: LauncherState,
 
     addr_input: String,
 
-    root_path: PathBuf,
-    version_file: PathBuf,
-    game_zip: PathBuf,
-    game_exe: PathBuf,
-
     server_process: Option<Child>,
     client_process: Option<Child>,
+
+    http: Client,
 }
 impl LauncherApp {
-    fn new() -> Result<Self> {
-        // Current file path
-        let root_path = std::env::current_dir().unwrap();
-        let version_file = root_path.join("version.txt");
-        let game_zip = root_path.join("game.zip");
-        let game_exe = root_path.join("target/release/client");
+    const CLIENT_EXE: &'static str = "build/client/client";
+    const CLIENT_VERSION: &'static str = "build/client/version.txt";
 
+    const SERVER_EXE: &'static str = "build/server/server";
+    const SERVER_VERSION: &'static str = "build/server/version.txt";
+
+    const LAUNCHER_VERSION: &'static str = "build/launcher/version.txt";
+    
+    fn new() -> Result<Self> {
         Ok(LauncherApp {
-            version: Version::try_from(LAUNCHER_VERSION)?,
             state: LauncherState::Ready,
             addr_input: String::new(),
-            root_path,
-            version_file,
-            game_zip,
-            game_exe,
             server_process: None,
             client_process: None,
+            http: Client::new(),
         })
     }
-    async fn check_for_client_updates(&mut self) -> Result<(), String> {
+    async fn fetch_remote_version(&self, relative_path: &str) -> Result<Version> {
+        let url = format!("{}{}", VERSION_SERVERS[0], relative_path);
+        let text = self.http.get(&url).send().await?.text().await?;
+        Version::try_from(text.trim()).map_err(anyhow::Error::msg)
+    }
+
+    async fn read_local_version(&self, relative_path: &str) -> Result<Version> {
+        let text = tokio::fs::read_to_string(relative_path).await?;
+        Version::try_from(text.trim()).map_err(anyhow::Error::msg)
+    }
+
+    async fn check_for_client_updates(&mut self) -> Result<()> {
         let version_url = format!("{}/client/version.txt", VERSION_SERVERS[0]);
-        let client = Client::new();
 
-        let remote_version_text = client
-            .get(&version_url)
-            .send()
-            .await
-            .map_err(|e| format!("Failed to request version file: {}", e))?
-            .text()
-            .await
-            .map_err(|e| format!("Failed to read version file response: {}", e))?;
+        let remote_version = self.fetch_remote_version("client/version.txt").await?;
 
-        let remote_version = Version::try_from(remote_version_text.trim())
-            .map_err(|e| format!("Invalid version format from server: {:?}", e))?;
-
-        if remote_version > self.version {
+        if remote_version > Version::from(Self::LAUNCHER_VERSION) {
             self.state = LauncherState::DownloadingUpdate;
             self.install_game_files(true).await?;
             self.version = remote_version;
@@ -92,101 +99,7 @@ impl LauncherApp {
 }
 impl eframe::App for LauncherApp {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
-        CentralPanel::default().show(ctx, |ui| {
-            ui.with_layout(Layout::top_down_justified(Align::Center), |ui| {
-                ui.add_space(20.0);
-                ui.label(
-                    RichText::new(&format!("{} Launcher", details::GAME_NAME))
-                        .heading()
-                        .size(28.0),
-                );
-
-                ui.add_space(20.0);
-
-                match self.state {
-                    LauncherState::MainMenu => {
-                        ui.label("Choose your game mode:");
-
-                        ui.add_space(10.0);
-                        if ui
-                            .add(
-                                egui::Button::new("🎮 Single Player")
-                                    .min_size([200.0, 40.0].into()),
-                            )
-                            .clicked()
-                        {
-                            let addr = &format!("127.0.0.1:{}", details::DEFAULT_PORT);
-                            self.server_process = launch_server(addr);
-                            self.client_process = launch_client(addr);
-                            self.state = LauncherState::Launching;
-                        }
-
-                        ui.add_space(5.0);
-                        if ui
-                            .add(egui::Button::new("🌐 Multiplayer").min_size([200.0, 40.0].into()))
-                            .clicked()
-                        {
-                            self.state = LauncherState::MultiplayerMenu;
-                        }
-                    }
-
-                    LauncherState::MultiplayerMenu => {
-                        ui.label(RichText::new("Multiplayer Options").strong().size(20.0));
-                        ui.add_space(10.0);
-
-                        if let Ok(local_addr) = local_ip() {
-                            ui.label(format!("Your Local IP: {}", local_addr));
-                        }
-
-                        ui.add_space(10.0);
-                        if ui
-                            .add(egui::Button::new("🛠 Host Game").min_size([200.0, 40.0].into()))
-                            .clicked()
-                        {
-                            let addr = format!("{}:{}", local_ip().unwrap(), details::DEFAULT_PORT);
-                            self.server_process = launch_server(&addr);
-                            self.client_process = launch_client(&addr);
-                            self.state = LauncherState::Launching;
-                        }
-
-                        ui.add_space(10.0);
-                        ui.horizontal(|ui| {
-                            ui.label("Join Address:");
-                            ui.text_edit_singleline(&mut self.addr_input);
-                        });
-
-                        ui.add_space(5.0);
-                        if ui
-                            .add(egui::Button::new("🔗 Join Game").min_size([200.0, 40.0].into()))
-                            .clicked()
-                        {
-                            self.client_process = launch_client(&self.addr_input);
-                            self.state = LauncherState::Launching;
-                        }
-
-                        ui.add_space(20.0);
-                        if ui.button("⬅ Back").clicked() {
-                            self.state = LauncherState::MainMenu;
-                        }
-                    }
-
-                    LauncherState::Launching => {
-                        ui.label(RichText::new("🚀 Game is launching...").size(20.0));
-                        ui.add_space(10.0);
-                        ui.label("You can close this launcher or stop the server/client below.");
-
-                        ui.add_space(20.0);
-                        if ui
-                            .add(egui::Button::new("⛔ Stop Game").min_size([150.0, 40.0].into()))
-                            .clicked()
-                        {
-                            stop_processes(self);
-                            self.state = LauncherState::MainMenu;
-                        }
-                    }
-                }
-            });
-        });
+        todo!()
     }
 }
 
