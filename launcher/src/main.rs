@@ -11,8 +11,9 @@ use tokio::process::{Child, Command};
 
 /// Current launchers version number
 const LAUNCHER_VERSION: &str = env!("CARGO_PKG_VERSION");
-const VERSION_SERVERS: [&str; 1] =
-    ["https://drive.google.com/drive/folders/1IezcI1yue--XeAM4vQUGaJLL8iwJaxH-?usp=drive_link"];
+/// Different servers that serve game and server binaries
+const VERSION_SERVERS: [&str; 1] = ["https://github.com/Larmbs/multiplayer_game/tree/master/build"];
+
 #[derive(Default)]
 enum LauncherState {
     #[default]
@@ -56,8 +57,34 @@ impl LauncherApp {
             client_process: None,
         })
     }
-    fn check_for_updates(&mut self) -> Result<(), String> {
-        todo!()
+    async fn check_for_client_updates(&mut self) -> Result<(), String> {
+        let version_url = format!("{}/client/version.txt", VERSION_SERVERS[0]);
+        let client = Client::new();
+
+        let remote_version_text = client
+            .get(&version_url)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to request version file: {}", e))?
+            .text()
+            .await
+            .map_err(|e| format!("Failed to read version file response: {}", e))?;
+
+        let remote_version = Version::try_from(remote_version_text.trim())
+            .map_err(|e| format!("Invalid version format from server: {:?}", e))?;
+
+        if remote_version > self.version {
+            self.state = LauncherState::DownloadingUpdate;
+            self.install_game_files(true).await?;
+            self.version = remote_version;
+            fs::write(&self.version_file, remote_version.to_string())
+                .await
+                .map_err(|e| format!("Failed to update local version file: {}", e))?;
+            self.state = LauncherState::Ready;
+            Ok(())
+        } else {
+            Ok(())
+        }
     }
     fn install_game_files(&mut self, is_update: bool) -> Result<(), String> {
         todo!()

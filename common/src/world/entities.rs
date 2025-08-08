@@ -1,9 +1,9 @@
 //! This module defines entities, a movable object in this world
 use std::collections::HashMap;
 
+use crate::{color::Color, vec::Vec2};
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
-use crate::{color::Color, vec::Vec2};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Decode, Encode)]
 pub struct Player {

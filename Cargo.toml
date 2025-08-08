@@ -4,4 +4,4 @@ members = [
     "server",
     "client",
     "launcher"
-, "bootstrapper"]
+]

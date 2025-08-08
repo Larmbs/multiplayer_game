@@ -1,8 +1,8 @@
 //! This file is part of the multiplayer game project.
 //! It defines the shapes used in the game rendering, including vertices and meshes for triangles and quads.
 //! The shapes are used to represent players and other entities in the game world.
-use std::f32::consts::PI;
 use common::{color::Color, vec::Vec2};
+use std::f32::consts::PI;
 
 /// Represents a vertex in the game world with position and color.
 /// This is used for rendering shapes like triangles and quads.

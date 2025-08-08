@@ -11,6 +11,9 @@ mod server;
 async fn main() -> Result<()> {
     let cli = cli::Cli::parse();
     let mut server = server::Server::init(&cli.address, cli.config).await?;
-    println!("Started server, listening on {}.", server.get_address().unwrap());
+    println!(
+        "Started server, listening on {}.",
+        server.get_address().unwrap()
+    );
     server.run().await
 }

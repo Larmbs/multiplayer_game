@@ -13,8 +13,12 @@ use tokio::{
 
 use super::ServerCommand;
 use crate::cli::ServerConfig;
-use common::{color::Color, message::{ClientMessage, ServerMessage}, vec::Vec2};
 use common::world::{World, entities::Player};
+use common::{
+    color::Color,
+    message::{ClientMessage, ServerMessage},
+    vec::Vec2,
+};
 
 /// ClientHandle manages a single client connection, processing messages and updating the game state.
 /// It handles incoming messages from the client, updates the world state, and sends responses back to

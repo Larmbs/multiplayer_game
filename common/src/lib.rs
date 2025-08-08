@@ -5,6 +5,6 @@ pub mod details;
 pub mod message;
 pub mod world;
 
-pub mod vec;
 pub mod color;
+pub mod vec;
 pub mod version;
