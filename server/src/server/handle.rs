@@ -59,6 +59,7 @@ impl ClientHandle {
         }
     }
 
+    /// Handles the client connection, processing messages and updating the world state.
     pub async fn handle(&mut self) -> Result<()> {
         let mut buffer = [0; 1024];
 

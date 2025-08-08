@@ -70,6 +70,8 @@ impl Server {
         })
     }
 
+    /// Starts the server, accepting connections and handling client messages.
+    /// This method runs indefinitely, processing incoming connections and messages.
     pub async fn run(&mut self) -> Result<()> {
         let world = self.world.clone();
         let command_tx = self.command_tx.clone();
