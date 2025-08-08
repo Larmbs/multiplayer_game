@@ -1,7 +1,5 @@
 use std::cmp::Ordering;
-use std::f32::consts::E;
 use std::fmt::Display;
-use anyhow::Result;
 
 #[derive(PartialEq)]
 pub struct Version {

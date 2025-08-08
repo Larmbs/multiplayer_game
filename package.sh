@@ -50,3 +50,7 @@ zip -r ./launcher.zip ./launcher*
 cd - > /dev/null
 
 echo "✅ Build and packaging complete. Output in $OUTPUT_DIR"
+
+echo "✅ Launching launcher"
+
+cargo run --release --bin launcher

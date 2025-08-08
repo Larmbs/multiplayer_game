@@ -96,7 +96,7 @@ impl Render {
 
         for (_, player) in world.entities.players.iter() {
             triangle_vertices.append(
-                &mut Tri::point(player.pos + camera.pos, 0.05, player.color.clone())
+                &mut Tri::point(player.pos, 0.05, player.color.clone())
                     .mesh_vertices(),
             );
         }
