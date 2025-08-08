@@ -69,7 +69,6 @@ impl LauncherApp {
         let text = self.http.get(&url).send().await?.text().await?;
         Version::try_from(text.trim()).map_err(anyhow::Error::msg)
     }
-
     async fn read_local_version(&self, relative_path: &str) -> Result<Version> {
         let text = tokio::fs::read_to_string(relative_path).await?;
         Version::try_from(text.trim()).map_err(anyhow::Error::msg)
@@ -82,11 +81,6 @@ impl LauncherApp {
 
         if remote_version > Version::from(Self::LAUNCHER_VERSION) {
             self.state = LauncherState::DownloadingUpdate;
-            self.install_game_files(true).await?;
-            self.version = remote_version;
-            fs::write(&self.version_file, remote_version.to_string())
-                .await
-                .map_err(|e| format!("Failed to update local version file: {}", e))?;
             self.state = LauncherState::Ready;
             Ok(())
         } else {

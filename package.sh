@@ -11,7 +11,7 @@ LAUNCHER_DIR="launcher"
 
 CLIENT_BUILD="target/release/client"
 SERVER_BUILD="target/release/server"
-LAUNCHER_DIR="target/release/launcher"
+LAUNCHER_BUILD="target/release/launcher"
 
 # Clean previous output
 rm -rf "$OUTPUT_DIR"
@@ -43,7 +43,7 @@ zip -r ./server.zip ./server*
 cd - > /dev/null
 
 mkdir -p "$OUTPUT_DIR/launcher/"
-cp "$LAUNCHER_DIR" "$OUTPUT_DIR/launcher/"
+cp "$LAUNCHER_BUILD" "$OUTPUT_DIR/launcher/"
 cp "$LAUNCHER_DIR/version.txt" "$OUTPUT_DIR/launcher/"
 cd "$OUTPUT_DIR/launcher"
 zip -r ./launcher.zip ./launcher*
