@@ -12,7 +12,7 @@ use common::message::{ClientMessage, ServerMessage};
 use common::world::{Player, World};
 
 pub struct ClientHandle {
-    player_id_counter: Arc<AtomicU64>,
+    client_id_counter: Arc<AtomicU64>,
     client_id: Option<u64>,
 
     // Reference to server config variables
@@ -29,7 +29,7 @@ pub struct ClientHandle {
 
 impl ClientHandle {
     pub fn new(
-        player_id_counter: Arc<AtomicU64>,
+        client_id_counter: Arc<AtomicU64>,
         server_config: Arc<ServerConfig>,
         stream: TcpStream,
         tx: UnboundedSender<ServerCommand>,
@@ -38,7 +38,7 @@ impl ClientHandle {
     ) -> Self {
         Self {
             server_config,
-            player_id_counter,
+            client_id_counter,
             client_id: None,
             stream,
             tx,
@@ -60,7 +60,7 @@ impl ClientHandle {
                         },
                         (ClientMessage::Connect(username, password), None) => {
                             if self.server_config.password.is_none() || password == self.server_config.password.clone().unwrap() {
-                                let new_id = self.player_id_counter.fetch_add(1, Ordering::Relaxed);
+                                let new_id = self.client_id_counter.fetch_add(1, Ordering::Relaxed);
                             let new_player = Player {
                                 username,
                                 x: 0.0,
@@ -71,32 +71,32 @@ impl ClientHandle {
 
 
                                 let mut world = self.world.lock().await;
-                                world.update_player(new_id, new_player);
+                                world.entities.players.insert(new_id, new_player);
 
                                 self.client_id = Some(new_id);
 
                                 let _ = ServerMessage::ConnectionAccepted(new_id).write_to_tcp_stream(&mut self.stream).await;
+
+                                let _ = self.tx.send(ServerCommand::Broadcast(ServerMessage::UpdateEntities(world.entities.clone())));
                             }
                     },
                         (ClientMessage::NotifyUpdatePlayer(player), Some(id)) =>{
                             // Update the player in the world state
                             let mut world = self.world.lock().await;
-                            world.update_player(id, player);
+                            world.entities.players.insert(id, player);
 
                             // Broadcast updated players to all clients
-                            let players = world.get_all_players().clone();
-                            let msg = ServerMessage::UpdatePlayers(players);
-
-                            let _ = self.tx.send(ServerCommand::Broadcast(msg));
+                            let _ = self.tx.send(ServerCommand::Broadcast(ServerMessage::UpdateEntities(world.entities.clone())));
                         },
-                        (ClientMessage::NotifyShot(player), Some(id)) =>{},
                         (ClientMessage::Disconnect, Some(id)) => {
+                            let mut world = self.world.lock().await;
+                            world.entities.players.remove(&id);
+                            let _ = self.tx.send(ServerCommand::Broadcast(ServerMessage::UpdateEntities(world.entities.clone())));
                             break;
                         },
                         _ => (),
                     }
                 }
-
                 Some(msg) = self.rx.recv() => {
                     let _ = msg.write_to_tcp_stream(&mut self.stream).await;
                 }

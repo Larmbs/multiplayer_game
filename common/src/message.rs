@@ -6,8 +6,6 @@
 //! binary communication. Each message type implements `encode` and `decode` methods
 //! to handle this serialization logic.
 
-use std::collections::HashMap;
-
 use anyhow::Result;
 use bincode::{Decode, Encode, config};
 use serde::{Deserialize, Serialize};
@@ -16,7 +14,7 @@ use tokio::{
     net::TcpStream,
 };
 
-use crate::world::{Player, Projectile};
+use crate::world::{Entities, Environment, Player};
 
 /// Messages that are sent from the Server to the Client
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Decode, Encode)]
@@ -28,8 +26,8 @@ pub enum ServerMessage {
     PasswordFailed,
 
     /* Notifies players of world updates */
-    UpdatePlayers(HashMap<u64, Player>),
-    UpdateProjectiles(Vec<Projectile>),
+    UpdateObjects(Environment),
+    UpdateEntities(Entities),
 }
 impl ServerMessage {
     pub fn encode(&self) -> Result<Vec<u8>> {
@@ -72,7 +70,6 @@ pub enum ClientMessage {
 
     /* Notifies server of client updates */
     NotifyUpdatePlayer(Player),
-    NotifyShot(Projectile),
 }
 impl ClientMessage {
     pub fn encode(&self) -> Result<Vec<u8>> {

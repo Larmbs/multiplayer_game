@@ -1,9 +1,11 @@
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
+use std::time::Duration;
 use tokio::net::{TcpListener, ToSocketAddrs};
 use tokio::select;
 use tokio::sync::Mutex;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+use tokio::time;
 
 use crate::cli::ServerConfig;
 use common::message::ServerMessage;
@@ -59,6 +61,27 @@ impl Server {
     }
 
     pub async fn run(&mut self) -> anyhow::Result<()> {
+        let world = self.world.clone();
+        let command_tx = self.command_tx.clone();
+        tokio::spawn(async move {
+            let mut interval = time::interval(Duration::from_millis(50)); // update every 50 ms
+            loop {
+                interval.tick().await;
+
+                {
+                    let mut w = world.lock().await;
+                    w.entities.update(0.05); // advance the world state by 50 ms (or whatever dt)
+                }
+                // Broadcast updated world to clients
+                // (Here you can customize message type accordingly)
+                if let Err(e) = command_tx.send(ServerCommand::Broadcast(
+                    ServerMessage::UpdateEntities(world.lock().await.entities.clone()),
+                )) {
+                    eprintln!("Failed to broadcast world update: {:?}", e);
+                }
+            }
+        });
+
         loop {
             select! {
                 Ok((stream, addr)) = self.listener.accept() => {

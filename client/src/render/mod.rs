@@ -1,9 +1,11 @@
+use common::world::World;
 use miniquad::*;
 
 use crate::render::shader::Uniforms;
 mod shader;
 
 #[repr(C)]
+#[derive(Debug)]
 struct Vec2 {
     x: f32,
     y: f32,
@@ -11,7 +13,6 @@ struct Vec2 {
 #[repr(C)]
 struct Vertex {
     pos: Vec2,
-    uv: Vec2,
 }
 
 pub struct Render {
@@ -20,25 +21,21 @@ pub struct Render {
     bindings: Bindings,
     uniforms: Uniforms,
     start_time: f64,
+
+    player_buffer: BufferId,
 }
 impl Render {
     pub fn init() -> Self {
         let mut ctx: Box<dyn RenderingBackend> = window::new_rendering_backend();
 
-        #[rustfmt::skip]
-        let vertices: [Vertex; 4] = [
-            Vertex { pos : Vec2 { x: -1.0, y: -1.0 }, uv: Vec2 { x: 0., y: 0. } },
-            Vertex { pos : Vec2 { x:  1.0, y: -1.0 }, uv: Vec2 { x: 1., y: 0. } },
-            Vertex { pos : Vec2 { x:  1.0, y:  1.0 }, uv: Vec2 { x: 1., y: 1. } },
-            Vertex { pos : Vec2 { x: -1.0, y:  1.0 }, uv: Vec2 { x: 0., y: 1. } },
-        ];
-        let vertex_buffer = ctx.new_buffer(
+        let player_buffer = ctx.new_buffer(
             BufferType::VertexBuffer,
-            BufferUsage::Immutable,
-            BufferSource::slice(&vertices),
+            BufferUsage::Dynamic,
+            BufferSource::empty::<Vertex>(5 * 3),
         );
 
-        let indices: [u16; 6] = [0, 1, 2, 0, 2, 3];
+        let indices: Vec<u16> = (0..25 as u16).collect();
+
         let index_buffer = ctx.new_buffer(
             BufferType::IndexBuffer,
             BufferUsage::Immutable,
@@ -46,8 +43,8 @@ impl Render {
         );
 
         let bindings = Bindings {
-            vertex_buffers: vec![vertex_buffer],
-            index_buffer: index_buffer,
+            vertex_buffers: vec![player_buffer],
+            index_buffer, // or remove entirely
             images: vec![],
         };
 
@@ -66,24 +63,16 @@ impl Render {
             )
             .unwrap();
 
-        let uniforms = shader::Uniforms {
-            time: 0.,
-            player_count: 3,
-            players: [(0.0, 0.0), (10.0, 0.0), (0.0, 5.0)],
-            player_size: (30.0, 30.0),
-            bullet_count: 3,
-            bullets: [(7.0, 0.0), (-10.0, 0.0), (0.0, -5.0)],
-            bullet_size: (10.0, 10.0),
-        };
+        let uniforms = shader::Uniforms { time: 0. };
 
         let pipeline = ctx.new_pipeline(
             &[BufferLayout::default()],
-            &[
-                VertexAttribute::new("in_pos", VertexFormat::Float2),
-                VertexAttribute::new("in_uv", VertexFormat::Float2),
-            ],
+            &[VertexAttribute::new("in_pos", VertexFormat::Float2)],
             shader,
-            PipelineParams::default(),
+            PipelineParams {
+                primitive_type: PrimitiveType::Triangles,
+                ..PipelineParams::default()
+            },
         );
 
         let start_time = miniquad::date::now();
@@ -94,10 +83,41 @@ impl Render {
             bindings,
             uniforms,
             start_time,
+            player_buffer,
         }
     }
-    pub fn draw(&mut self) {
+    pub fn draw(&mut self, world: &World) {
         self.uniforms.time = (miniquad::date::now() - self.start_time) as f32;
+
+        let size = 0.05; // adjust size as needed (in NDC coords)
+
+        let mut triangle_vertices = Vec::new();
+
+        for (_, player) in world.entities.players.iter() {
+            let x = player.x;
+            let y = player.y;
+
+            // Define a simple triangle around (x, y)
+            triangle_vertices.push(Vertex {
+                pos: Vec2 { x: x, y: y + size },
+            }); // top vertex
+            triangle_vertices.push(Vertex {
+                pos: Vec2 {
+                    x: x - size,
+                    y: y - size,
+                },
+            }); // bottom left
+            triangle_vertices.push(Vertex {
+                pos: Vec2 {
+                    x: x + size,
+                    y: y - size,
+                },
+            }); // bottom right
+        }
+
+        // Update the player buffer with all triangle vertices
+        self.ctx
+            .buffer_update(self.player_buffer, BufferSource::slice(&triangle_vertices));
 
         self.ctx
             .begin_default_pass(PassAction::clear_color(0.7, 0.1, 0.1, 1.0));
@@ -105,7 +125,7 @@ impl Render {
         self.ctx.apply_bindings(&self.bindings);
         self.ctx
             .apply_uniforms(UniformsSource::table(&self.uniforms));
-        self.ctx.draw(0, 6, 1); // 3 vertices = 1 triangle
+        self.ctx.draw(0, triangle_vertices.len() as i32, 1);
         self.ctx.end_render_pass();
         self.ctx.commit_frame();
     }

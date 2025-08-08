@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use common::message::{ClientMessage, ServerMessage};
-use common::world::World;
+use common::world::{Player, World};
 use miniquad::conf::Conf;
 use miniquad::*;
 use tokio::runtime::Runtime;
@@ -75,16 +75,13 @@ impl EventHandler for GameRuntime {
         let dt = (time - self.last_frame) as f32;
         self.last_frame = time;
 
-        self.world.update(dt);
+        self.world.entities.update(dt);
 
         // Receive world updates from server
         while let Ok(msg) = self.server_rx.try_recv() {
             match msg {
-                ServerMessage::UpdatePlayers(players) => {
-                    self.world.set_players(players); // You'll need to implement this
-                }
-                ServerMessage::UpdateProjectiles(projectiles) => {
-                    self.world.set_projectiles(projectiles); // Implement this
+                ServerMessage::UpdateEntities(players) => {
+                    self.world.entities = players; // You'll need to implement this
                 }
                 _ => {}
             }
@@ -92,9 +89,22 @@ impl EventHandler for GameRuntime {
     }
 
     fn draw(&mut self) {
-        self.render.draw();
+        self.render.draw(&self.world);
     }
+    fn key_up_event(&mut self, _keycode: KeyCode, _keymods: KeyMods) {
+        let self_player = self.world.entities.players.get(&self.player_id).unwrap();
+        let player = Player {
+            x: self_player.x, // Client doesn't know its true position yet
+            y: self_player.y,
+            vx: 0.0,
+            vy: 0.0,
+            username: self.username.clone(),
+        };
 
+        let _ = self
+            .server_tx
+            .send(ClientMessage::NotifyUpdatePlayer(player));
+    }
     fn key_down_event(&mut self, keycode: KeyCode, _mods: KeyMods, _repeat: bool) {
         use common::message::ClientMessage;
         use common::world::Player;
@@ -108,16 +118,10 @@ impl EventHandler for GameRuntime {
             KeyCode::S => vy = 1.0,
             KeyCode::A => vx = -1.0,
             KeyCode::D => vx = 1.0,
-            KeyCode::Space => {
-                // Simulate firing a projectile
-                let projectile = self.world.create_projectile(); // You write this
-                let _ = self.server_tx.send(ClientMessage::NotifyShot(projectile));
-                return;
-            }
             _ => return,
         }
 
-        let self_player = self.world.get_all_players().get(&self.player_id).unwrap();
+        let self_player = self.world.entities.players.get(&self.player_id).unwrap();
         let player = Player {
             x: self_player.x, // Client doesn't know its true position yet
             y: self_player.y,
