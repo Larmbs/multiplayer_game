@@ -1,7 +1,7 @@
 use common::world::World;
 use miniquad::*;
 
-use crate::render::shader::Uniforms;
+use crate::{camera::Camera, render::shader::Uniforms};
 mod shader;
 
 #[repr(C)]
@@ -63,7 +63,7 @@ impl Render {
             )
             .unwrap();
 
-        let uniforms = shader::Uniforms { time: 0. };
+        let uniforms = shader::Uniforms { time: 0., offset: (0.0, 0.0) };
 
         let pipeline = ctx.new_pipeline(
             &[BufferLayout::default()],
@@ -86,9 +86,10 @@ impl Render {
             player_buffer,
         }
     }
-    pub fn draw(&mut self, world: &World) {
+    pub fn draw(&mut self, camera: &Camera, world: &World) {
         self.uniforms.time = (miniquad::date::now() - self.start_time) as f32;
-
+        self.uniforms.offset = (camera.x, camera.y);
+    
         let size = 0.05; // adjust size as needed (in NDC coords)
 
         let mut triangle_vertices = Vec::new();

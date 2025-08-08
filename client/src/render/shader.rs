@@ -6,9 +6,11 @@ precision mediump float;
 
 attribute vec2 in_pos;
 uniform float time;
+uniform vec2 offset;
+
 
 void main() {
-    gl_Position = vec4(in_pos, 0.0, 1.0);
+    gl_Position = vec4(in_pos - offset, 0.0, 1.0);
     gl_PointSize = 400.0; // Size in screen pixels
 }
 "#;
@@ -29,6 +31,7 @@ pub fn meta() -> ShaderMeta {
         uniforms: UniformBlockLayout {
             uniforms: vec![
                 UniformDesc::new("time", UniformType::Float1),
+                UniformDesc::new("offset", UniformType::Float2),
             ],
         },
     }
@@ -37,4 +40,5 @@ pub fn meta() -> ShaderMeta {
 #[repr(C)]
 pub struct Uniforms {
     pub time: f32,
+    pub offset: (f32, f32),
 }

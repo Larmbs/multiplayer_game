@@ -7,9 +7,12 @@ use miniquad::*;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
+mod camera;
 mod cli;
 mod client;
 mod render;
+
+use camera::Camera;
 use cli::Cli;
 use client::Client;
 use render::Render;
@@ -26,6 +29,7 @@ pub struct GameRuntime {
 
     /* Rendering related */
     render: Render,
+    camera: Camera,
 
     last_frame: f64,
 
@@ -66,6 +70,7 @@ impl GameRuntime {
             last_frame: time,
             player_id: id,
             username: cli.username,
+            camera: Camera { x: 0.0, y: 0.0 },
         })
     }
 }
@@ -76,6 +81,11 @@ impl EventHandler for GameRuntime {
         self.last_frame = time;
 
         self.world.entities.update(dt);
+        
+        if let Some(self_player) = self.world.entities.players.get(&self.player_id) {
+            self.camera.x = self_player.x;
+            self.camera.y = self_player.y;
+        }
 
         // Receive world updates from server
         while let Ok(msg) = self.server_rx.try_recv() {
@@ -89,7 +99,7 @@ impl EventHandler for GameRuntime {
     }
 
     fn draw(&mut self) {
-        self.render.draw(&self.world);
+        self.render.draw(&self.camera, &self.world);
     }
     fn key_up_event(&mut self, _keycode: KeyCode, _keymods: KeyMods) {
         let self_player = self.world.entities.players.get(&self.player_id).unwrap();
