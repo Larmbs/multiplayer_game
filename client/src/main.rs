@@ -1,11 +1,19 @@
+//! This binary is part of the multiplayer game project.
+//! It defines the main entry point for the game client, which connects to the server,
+//! handles user input, and renders the game world. The client uses Tokio for asynchronous
+//! networking and Miniquad for rendering. It supports player movement, updates the game state,
+//! and communicates with the server to synchronize the game world.
 use anyhow::Result;
 use clap::Parser;
+
+use miniquad::{conf::Conf, *};
+
 use common::message::{ClientMessage, ServerMessage};
-use common::world::{Player, World};
-use miniquad::conf::Conf;
-use miniquad::*;
-use tokio::runtime::Runtime;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+use common::world::{World, entities::Player};
+use tokio::{
+    runtime::Runtime,
+    sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel},
+};
 
 mod camera;
 mod cli;
@@ -17,6 +25,7 @@ use cli::Cli;
 use client::Client;
 use render::Render;
 
+/// GameRuntime manages the game loop, rendering, and client-server communication.
 pub struct GameRuntime {
     /* Inbox of messages from the server */
     /// Async context
@@ -31,7 +40,8 @@ pub struct GameRuntime {
     render: Render,
     camera: Camera,
 
-    last_frame: f64,
+    last_frame: f32,
+    time_accumulator: f32,
 
     player_id: u64,
     username: String,
@@ -59,7 +69,7 @@ impl GameRuntime {
 
         let world = World::new();
         let render = Render::init();
-        let time = miniquad::date::now();
+        let time = miniquad::date::now() as f32;
 
         Ok(Self {
             _runtime: runtime,
@@ -68,6 +78,7 @@ impl GameRuntime {
             world,
             render,
             last_frame: time,
+            time_accumulator: 0.0,
             player_id: id,
             username: cli.username,
             camera: Camera { x: 0.0, y: 0.0 },
@@ -76,15 +87,22 @@ impl GameRuntime {
 }
 impl EventHandler for GameRuntime {
     fn update(&mut self) {
-        let time = miniquad::date::now();
+        const FIXED_TIMESTEP: f32 = 1.0 / 60.0;
+        let time = miniquad::date::now() as f32;
         let dt = (time - self.last_frame) as f32;
         self.last_frame = time;
 
-        self.world.entities.update(dt);
-        
-        if let Some(self_player) = self.world.entities.players.get(&self.player_id) {
-            self.camera.x = self_player.x;
-            self.camera.y = self_player.y;
+        self.time_accumulator += dt;
+
+        while self.time_accumulator >= FIXED_TIMESTEP {
+            self.world.entities.update(dt);
+
+            if let Some(self_player) = self.world.entities.players.get(&self.player_id) {
+                self.camera.x = self_player.x;
+                self.camera.y = self_player.y;
+            }
+
+            self.time_accumulator -= FIXED_TIMESTEP;
         }
 
         // Receive world updates from server
@@ -116,16 +134,13 @@ impl EventHandler for GameRuntime {
             .send(ClientMessage::NotifyUpdatePlayer(player));
     }
     fn key_down_event(&mut self, keycode: KeyCode, _mods: KeyMods, _repeat: bool) {
-        use common::message::ClientMessage;
-        use common::world::Player;
-
         // Simulate movement based on key input
         let mut vx = 0.0;
         let mut vy = 0.0;
 
         match keycode {
-            KeyCode::W => vy = -1.0,
-            KeyCode::S => vy = 1.0,
+            KeyCode::W => vy = 1.0,
+            KeyCode::S => vy = -1.0,
             KeyCode::A => vx = -1.0,
             KeyCode::D => vx = 1.0,
             _ => return,
@@ -146,20 +161,16 @@ impl EventHandler for GameRuntime {
     }
 }
 
-fn window_conf() -> Conf {
-    Conf {
+fn main() {
+    let cli = Cli::parse();
+
+    let mut conf = Conf {
         window_title: "My Game".to_string(),
         window_width: 800,
         window_height: 600,
         window_resizable: true, // Enable window resizing
         ..Default::default()
-    }
-}
-
-fn main() {
-    let cli = Cli::parse();
-
-    let mut conf = window_conf();
+    };
 
     let metal = cli.metal;
     conf.platform.apple_gfx_api = if metal {

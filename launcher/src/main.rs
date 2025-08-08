@@ -1,17 +1,11 @@
+//! This binary is part of the multiplayer game project.
+//! It defines the main entry point for the game launcher, which provides a user interface for
+//! launching the game server and client, as well as options for single-player and multiplayer modes.
 use common::details;
 use eframe::egui::{self, Align, CentralPanel, Context, Layout, RichText};
 use local_ip_address::local_ip;
 use std::process::Stdio;
 use tokio::process::{Child, Command};
-#[tokio::main]
-async fn main() -> eframe::Result<()> {
-    let options = eframe::NativeOptions::default();
-    eframe::run_native(
-        &format!("{} Launcher", details::GAME_NAME),
-        options,
-        Box::new(|_cc| Ok(Box::new(LauncherApp::default()))),
-    )
-}
 
 #[derive(Default)]
 struct LauncherApp {
@@ -133,6 +127,16 @@ impl Drop for LauncherApp {
     fn drop(&mut self) {
         stop_processes(self);
     }
+}
+
+#[tokio::main]
+async fn main() -> eframe::Result<()> {
+    let options = eframe::NativeOptions::default();
+    eframe::run_native(
+        &format!("{} Launcher", details::GAME_NAME),
+        options,
+        Box::new(|_cc| Ok(Box::new(LauncherApp::default()))),
+    )
 }
 
 fn stop_processes(app: &mut LauncherApp) {

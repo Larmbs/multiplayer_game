@@ -14,7 +14,7 @@ use tokio::{
     net::TcpStream,
 };
 
-use crate::world::{Entities, Environment, Player};
+use crate::world::{entities::{Entities, Player}, environment::Environment};
 
 /// Messages that are sent from the Server to the Client
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Decode, Encode)]

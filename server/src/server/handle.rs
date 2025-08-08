@@ -1,27 +1,39 @@
-use std::sync::atomic::{AtomicU64, Ordering};
-
+//! Handles the client connections and communication with the server.
+use anyhow::Result;
 use std::sync::Arc;
-use tokio::net::TcpStream;
-use tokio::select;
-use tokio::sync::Mutex;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+
+use tokio::{
+    net::TcpStream,
+    select,
+    sync::{
+        Mutex,
+        mpsc::{UnboundedReceiver, UnboundedSender},
+    },
+};
 
 use super::ServerCommand;
 use crate::cli::ServerConfig;
 use common::message::{ClientMessage, ServerMessage};
-use common::world::{Player, World};
+use common::world::{entities::Player, World};
 
+/// ClientHandle manages a single client connection, processing messages and updating the game state.
+/// It handles incoming messages from the client, updates the world state, and sends responses back to
 pub struct ClientHandle {
-    client_id_counter: Arc<AtomicU64>,
-    client_id: Option<u64>,
+    /// TCP stream for communication with the client
+    stream: TcpStream,
+
+    /// Unique identifier for the client
+    client_id: u64,
+    /// Whether the client has been accepted and is allowed to interact with the server
+    accepted: bool,
 
     // Reference to server config variables
     server_config: Arc<ServerConfig>,
 
-    stream: TcpStream,
-    // Sends a ServerCommand to the server to execute it
+    /* Server Handle communication */
+    /// Sends a ServerCommand to the server to execute it
     tx: UnboundedSender<ServerCommand>,
-    // Receives a server message to send to the client
+    /// Receives a server message to send to the client
     rx: UnboundedReceiver<ServerMessage>,
 
     world: Arc<Mutex<World>>,
@@ -29,7 +41,7 @@ pub struct ClientHandle {
 
 impl ClientHandle {
     pub fn new(
-        client_id_counter: Arc<AtomicU64>,
+        client_id: u64,
         server_config: Arc<ServerConfig>,
         stream: TcpStream,
         tx: UnboundedSender<ServerCommand>,
@@ -38,67 +50,66 @@ impl ClientHandle {
     ) -> Self {
         Self {
             server_config,
-            client_id_counter,
-            client_id: None,
+            client_id,
             stream,
             tx,
             rx,
             world,
+            accepted: false,
         }
     }
 
-    pub async fn handle(&mut self) -> anyhow::Result<()> {
+    pub async fn handle(&mut self) -> Result<()> {
         let mut buffer = [0; 1024];
 
         loop {
             select! {
                 client_message = ClientMessage::read_from_tcp_stream(&mut self.stream, &mut buffer) => {
-
-                    match (client_message?, self.client_id) {
-                        (ClientMessage::Ping, _) =>{
+                    match client_message? {
+                        ClientMessage::Ping =>{
                             let _ = self.tx.send(ServerCommand::Broadcast(ServerMessage::Ping));
                         },
-                        (ClientMessage::Connect(username, password), None) => {
+                        ClientMessage::Connect(username, password) => {
+                            // Check if the password is correct
                             if self.server_config.password.is_none() || password == self.server_config.password.clone().unwrap() {
-                                let new_id = self.client_id_counter.fetch_add(1, Ordering::Relaxed);
-                            let new_player = Player {
-                                username,
-                                x: 0.0,
-                                y: 0.0,
-                                vx: 0.0,
-                                vy: 0.0,
-                            };
-
-
+                                // Create a new player and add it to the world
+                                let new_player = Player {
+                                    username,
+                                    x: 0.0,
+                                    y: 0.0,
+                                    vx: 0.0,
+                                    vy: 0.0,
+                                };
                                 let mut world = self.world.lock().await;
-                                world.entities.players.insert(new_id, new_player);
+                                world.entities.players.insert(self.client_id, new_player);
 
-                                self.client_id = Some(new_id);
+                                let _ = ServerMessage::ConnectionAccepted(self.client_id).write_to_tcp_stream(&mut self.stream).await;
+                                let _ = self.tx.send(ServerCommand::UpdateEntities);
 
-                                let _ = ServerMessage::ConnectionAccepted(new_id).write_to_tcp_stream(&mut self.stream).await;
-
-                                let _ = self.tx.send(ServerCommand::Broadcast(ServerMessage::UpdateEntities(world.entities.clone())));
+                                self.accepted = true;
                             }
-                    },
-                        (ClientMessage::NotifyUpdatePlayer(player), Some(id)) =>{
+                        },
+                        ClientMessage::NotifyUpdatePlayer(player) =>{
                             // Update the player in the world state
                             let mut world = self.world.lock().await;
-                            world.entities.players.insert(id, player);
+                            world.entities.players.insert(self.client_id, player);
 
                             // Broadcast updated players to all clients
-                            let _ = self.tx.send(ServerCommand::Broadcast(ServerMessage::UpdateEntities(world.entities.clone())));
+                            let _ = self.tx.send(ServerCommand::UpdateEntities);
                         },
-                        (ClientMessage::Disconnect, Some(id)) => {
+                        ClientMessage::Disconnect => {
                             let mut world = self.world.lock().await;
-                            world.entities.players.remove(&id);
-                            let _ = self.tx.send(ServerCommand::Broadcast(ServerMessage::UpdateEntities(world.entities.clone())));
+                            world.entities.players.remove(&self.client_id);
+
+                            let _ = self.tx.send(ServerCommand::UpdateEntities);
                             break;
                         },
-                        _ => (),
                     }
                 }
                 Some(msg) = self.rx.recv() => {
-                    let _ = msg.write_to_tcp_stream(&mut self.stream).await;
+                    if self.accepted {
+                        let _ = msg.write_to_tcp_stream(&mut self.stream).await;
+                    }
                 }
             }
         }

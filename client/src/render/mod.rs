@@ -1,19 +1,16 @@
+//! 
 use common::world::World;
 use miniquad::*;
 
-use crate::{camera::Camera, render::shader::Uniforms};
+use crate::{
+    camera::Camera,
+    render::{
+        shader::Uniforms,
+        shapes::{Mesh, Tri, Vertex},
+    },
+};
 mod shader;
-
-#[repr(C)]
-#[derive(Debug)]
-struct Vec2 {
-    x: f32,
-    y: f32,
-}
-#[repr(C)]
-struct Vertex {
-    pos: Vec2,
-}
+mod shapes;
 
 pub struct Render {
     ctx: Box<dyn RenderingBackend>,
@@ -31,7 +28,7 @@ impl Render {
         let player_buffer = ctx.new_buffer(
             BufferType::VertexBuffer,
             BufferUsage::Dynamic,
-            BufferSource::empty::<Vertex>(5 * 3),
+            BufferSource::empty::<shapes::Vertex>(5 * 3),
         );
 
         let indices: Vec<u16> = (0..25 as u16).collect();
@@ -63,7 +60,10 @@ impl Render {
             )
             .unwrap();
 
-        let uniforms = shader::Uniforms { time: 0., offset: (0.0, 0.0) };
+        let uniforms = shader::Uniforms {
+            time: 0.,
+            offset: (0.0, 0.0),
+        };
 
         let pipeline = ctx.new_pipeline(
             &[BufferLayout::default()],
@@ -89,31 +89,20 @@ impl Render {
     pub fn draw(&mut self, camera: &Camera, world: &World) {
         self.uniforms.time = (miniquad::date::now() - self.start_time) as f32;
         self.uniforms.offset = (camera.x, camera.y);
-    
-        let size = 0.05; // adjust size as needed (in NDC coords)
 
         let mut triangle_vertices = Vec::new();
 
         for (_, player) in world.entities.players.iter() {
-            let x = player.x;
-            let y = player.y;
-
-            // Define a simple triangle around (x, y)
-            triangle_vertices.push(Vertex {
-                pos: Vec2 { x: x, y: y + size },
-            }); // top vertex
-            triangle_vertices.push(Vertex {
-                pos: Vec2 {
-                    x: x - size,
-                    y: y - size,
-                },
-            }); // bottom left
-            triangle_vertices.push(Vertex {
-                pos: Vec2 {
-                    x: x + size,
-                    y: y - size,
-                },
-            }); // bottom right
+            triangle_vertices.append(
+                &mut Tri::point(
+                    Vertex {
+                        x: player.x,
+                        y: player.y,
+                    },
+                    0.05,
+                )
+                .mesh_vertices(),
+            );
         }
 
         // Update the player buffer with all triangle vertices

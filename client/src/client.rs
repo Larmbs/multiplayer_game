@@ -29,7 +29,6 @@ impl Client {
         let mut buffer = [0; 1024];
         match ServerMessage::read_from_tcp_stream(&mut stream, &mut buffer).await? {
             ServerMessage::ConnectionAccepted(id) => {
-                println!("HI");
                 Ok((
                     id,
                     Self {
