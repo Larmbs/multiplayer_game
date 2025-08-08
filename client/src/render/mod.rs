@@ -1,12 +1,11 @@
 use common::world::World;
 use miniquad::*;
-use common::{color::Color, vec::Vec2};
 
 use crate::{
     camera::Camera,
     render::{
         shader::Uniforms,
-        shapes::{Mesh, Tri, Vertex},
+        shapes::{Mesh, Tri},
     },
 };
 mod shader;
@@ -97,12 +96,8 @@ impl Render {
 
         for (_, player) in world.entities.players.iter() {
             triangle_vertices.append(
-                &mut Tri::point(
-                    player.pos + camera.pos,
-                    0.05,
-                    player.color.clone(),
-                )
-                .mesh_vertices(),
+                &mut Tri::point(player.pos + camera.pos, 0.05, player.color.clone())
+                    .mesh_vertices(),
             );
         }
 
