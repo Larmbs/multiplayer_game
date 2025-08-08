@@ -1,4 +1,5 @@
+use common::vec::Vec2;
+
 pub struct Camera {
-    pub x: f32,
-    pub y: f32,
+    pub pos: Vec2,
 }

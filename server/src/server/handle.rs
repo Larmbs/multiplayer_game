@@ -13,8 +13,8 @@ use tokio::{
 
 use super::ServerCommand;
 use crate::cli::ServerConfig;
-use common::message::{ClientMessage, ServerMessage};
-use common::world::{entities::Player, World};
+use common::{color::Color, message::{ClientMessage, ServerMessage}, vec::Vec2};
+use common::world::{World, entities::Player};
 
 /// ClientHandle manages a single client connection, processing messages and updating the game state.
 /// It handles incoming messages from the client, updates the world state, and sends responses back to
@@ -75,10 +75,9 @@ impl ClientHandle {
                                 // Create a new player and add it to the world
                                 let new_player = Player {
                                     username,
-                                    x: 0.0,
-                                    y: 0.0,
-                                    vx: 0.0,
-                                    vy: 0.0,
+                                    color: Color::random(), // Default color
+                                    pos: Vec2::ZERO,
+                                    vel: Vec2::ZERO,
                                 };
                                 let mut world = self.world.lock().await;
                                 world.entities.players.insert(self.client_id, new_player);

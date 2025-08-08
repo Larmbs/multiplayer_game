@@ -1,6 +1,6 @@
-//! 
 use common::world::World;
 use miniquad::*;
+use common::{color::Color, vec::Vec2};
 
 use crate::{
     camera::Camera,
@@ -67,7 +67,10 @@ impl Render {
 
         let pipeline = ctx.new_pipeline(
             &[BufferLayout::default()],
-            &[VertexAttribute::new("in_pos", VertexFormat::Float2)],
+            &[
+                VertexAttribute::new("in_pos", VertexFormat::Float2),
+                VertexAttribute::new("in_color", VertexFormat::Float3),
+            ],
             shader,
             PipelineParams {
                 primitive_type: PrimitiveType::Triangles,
@@ -88,18 +91,16 @@ impl Render {
     }
     pub fn draw(&mut self, camera: &Camera, world: &World) {
         self.uniforms.time = (miniquad::date::now() - self.start_time) as f32;
-        self.uniforms.offset = (camera.x, camera.y);
+        self.uniforms.offset = (camera.pos.x, camera.pos.y);
 
         let mut triangle_vertices = Vec::new();
 
         for (_, player) in world.entities.players.iter() {
             triangle_vertices.append(
                 &mut Tri::point(
-                    Vertex {
-                        x: player.x,
-                        y: player.y,
-                    },
+                    player.pos + camera.pos,
                     0.05,
+                    player.color.clone(),
                 )
                 .mesh_vertices(),
             );
@@ -110,7 +111,7 @@ impl Render {
             .buffer_update(self.player_buffer, BufferSource::slice(&triangle_vertices));
 
         self.ctx
-            .begin_default_pass(PassAction::clear_color(0.7, 0.1, 0.1, 1.0));
+            .begin_default_pass(PassAction::clear_color(0.0, 0.0, 0.0, 1.0));
         self.ctx.apply_pipeline(&self.pipeline);
         self.ctx.apply_bindings(&self.bindings);
         self.ctx

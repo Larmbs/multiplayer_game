@@ -5,21 +5,27 @@ pub const VERTEX: &str = r#"
 precision mediump float;
 
 attribute vec2 in_pos;
+attribute vec3 in_color;
+
 uniform float time;
 uniform vec2 offset;
 
+varying vec3 color;
 
 void main() {
     gl_Position = vec4(in_pos - offset, 0.0, 1.0);
     gl_PointSize = 400.0; // Size in screen pixels
+    color = in_color;
 }
 "#;
 
 pub const FRAGMENT: &str = r#"#version 100
 precision mediump float;
 
+varying vec3 color;
+
 void main() {
-    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0); // White dot
+    gl_FragColor = vec4(color, 1.0); // White dot
 }
 "#;
 

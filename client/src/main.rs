@@ -6,6 +6,7 @@
 use anyhow::Result;
 use clap::Parser;
 
+use common::vec::Vec2;
 use miniquad::{conf::Conf, *};
 
 use common::message::{ClientMessage, ServerMessage};
@@ -81,7 +82,7 @@ impl GameRuntime {
             time_accumulator: 0.0,
             player_id: id,
             username: cli.username,
-            camera: Camera { x: 0.0, y: 0.0 },
+            camera: Camera { pos: Vec2::ZERO },
         })
     }
 }
@@ -97,12 +98,11 @@ impl EventHandler for GameRuntime {
         while self.time_accumulator >= FIXED_TIMESTEP {
             self.world.entities.update(dt);
 
-            if let Some(self_player) = self.world.entities.players.get(&self.player_id) {
-                self.camera.x = self_player.x;
-                self.camera.y = self_player.y;
-            }
-
             self.time_accumulator -= FIXED_TIMESTEP;
+        }
+
+        if let Some(self_player) = self.world.entities.players.get(&self.player_id) {
+            self.camera.pos = self_player.pos;
         }
 
         // Receive world updates from server
@@ -122,10 +122,9 @@ impl EventHandler for GameRuntime {
     fn key_up_event(&mut self, _keycode: KeyCode, _keymods: KeyMods) {
         let self_player = self.world.entities.players.get(&self.player_id).unwrap();
         let player = Player {
-            x: self_player.x, // Client doesn't know its true position yet
-            y: self_player.y,
-            vx: 0.0,
-            vy: 0.0,
+            color: self_player.color,
+            pos: self_player.pos,
+            vel: Vec2::ZERO,
             username: self.username.clone(),
         };
 
@@ -148,10 +147,9 @@ impl EventHandler for GameRuntime {
 
         let self_player = self.world.entities.players.get(&self.player_id).unwrap();
         let player = Player {
-            x: self_player.x, // Client doesn't know its true position yet
-            y: self_player.y,
-            vx,
-            vy,
+            color: self_player.color,
+            pos: self_player.pos,
+            vel: Vec2 { x: vx, y: vy },
             username: self.username.clone(),
         };
 
