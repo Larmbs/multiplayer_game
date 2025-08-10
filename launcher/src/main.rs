@@ -17,9 +17,9 @@
 use anyhow::Result;
 use common::details;
 use common::version::Version;
-use eframe::egui::{self, Align, CentralPanel, Context, Layout, RichText};
+use eframe::egui::{self, Context};
 use local_ip_address::local_ip;
-use reqwest::{Client, Response};
+use reqwest::Client;
 use std::{path::PathBuf, process::Stdio};
 use tokio::process::{Child, Command};
 
@@ -250,7 +250,7 @@ impl eframe::App for LauncherApp {
                     .add(Button::new("🎮 Join").min_size([150.0, 30.0].into()))
                     .clicked()
                 {
-                    if self.server_process.is_none() || true {
+                    if self.client_process.is_none() || true {
                         if let Err(e) = self.launch_client(&self.addr_input.clone()) {
                             self.state = LauncherState::Failed;
                             eprintln!("{e}");
@@ -262,11 +262,12 @@ impl eframe::App for LauncherApp {
                     .clicked()
                 {
                     if self.server_process.is_none() {
-                        if let Err(e) = self.launch_server(&self.addr_input.clone()) {
+                        let ip = &format!("{}:8000", local_ip().unwrap().to_string());
+                        if let Err(e) = self.launch_server(ip) {
                             self.state = LauncherState::Failed;
                             eprintln!("{e}");
                         }
-                        if let Err(e) = self.launch_client(&self.addr_input.clone()) {
+                        if let Err(e) = self.launch_client(ip) {
                             self.state = LauncherState::Failed;
                             eprintln!("{e}");
                         }
@@ -276,13 +277,15 @@ impl eframe::App for LauncherApp {
                     .add(Button::new("👤 Single Player").min_size([150.0, 30.0].into()))
                     .clicked()
                 {
-                    if let Err(e) = self.launch_server("127.0.0:8000") {
-                        self.state = LauncherState::Failed;
-                        eprintln!("{e}");
-                    }
-                    if let Err(e) = self.launch_client("127.0.0:8000") {
-                        self.state = LauncherState::Failed;
-                        eprintln!("{e}");
+                    if self.server_process.is_none() {
+                        if let Err(e) = self.launch_server("127.0.0.1:8000") {
+                            self.state = LauncherState::Failed;
+                            eprintln!("{e}");
+                        }
+                        if let Err(e) = self.launch_client("127.0.0.1:8000") {
+                            self.state = LauncherState::Failed;
+                            eprintln!("{e}");
+                        }
                     }
                 }
 
