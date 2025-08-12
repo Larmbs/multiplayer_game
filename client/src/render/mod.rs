@@ -1,4 +1,4 @@
-use common::world::World;
+use common::world::GameWorld;
 use miniquad::*;
 
 use crate::{
@@ -88,7 +88,7 @@ impl Render {
             player_buffer,
         }
     }
-    pub fn draw(&mut self, camera: &Camera, world: &World) {
+    pub fn draw(&mut self, camera: &Camera, world: &GameWorld) {
         self.uniforms.time = (miniquad::date::now() - self.start_time) as f32;
         self.uniforms.offset = (camera.pos.x, camera.pos.y);
 

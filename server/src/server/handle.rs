@@ -13,7 +13,7 @@ use tokio::{
 
 use super::ServerCommand;
 use crate::cli::ServerConfig;
-use common::world::{World, entities::Player};
+use common::world::{GameWorld, entities::Player};
 use common::{
     color::Color,
     message::{ClientMessage, ServerMessage},
@@ -40,7 +40,7 @@ pub struct ClientHandle {
     /// Receives a server message to send to the client
     rx: UnboundedReceiver<ServerMessage>,
 
-    world: Arc<Mutex<World>>,
+    world: Arc<Mutex<GameWorld>>,
 }
 
 impl ClientHandle {
@@ -50,7 +50,7 @@ impl ClientHandle {
         stream: TcpStream,
         tx: UnboundedSender<ServerCommand>,
         rx: UnboundedReceiver<ServerMessage>,
-        world: Arc<Mutex<World>>,
+        world: Arc<Mutex<GameWorld>>,
     ) -> Self {
         Self {
             server_config,

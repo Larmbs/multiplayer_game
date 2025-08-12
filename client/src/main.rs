@@ -10,7 +10,7 @@ use common::vec::Vec2;
 use miniquad::{conf::Conf, *};
 
 use common::message::{ClientMessage, ServerMessage};
-use common::world::{World, entities::Player};
+use common::world::{GameWorld, entities::Player};
 use tokio::{
     runtime::Runtime,
     sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel},
@@ -35,7 +35,7 @@ pub struct GameRuntime {
     server_tx: UnboundedSender<ClientMessage>,
 
     /// World data
-    world: World,
+    world: GameWorld,
 
     /* Rendering related */
     render: Render,
@@ -68,7 +68,7 @@ impl GameRuntime {
             let _ = client.listen().await;
         });
 
-        let world = World::new();
+        let world = GameWorld::new();
         let render = Render::init();
         let time = miniquad::date::now() as f32;
 
@@ -96,8 +96,8 @@ impl EventHandler for GameRuntime {
         self.time_accumulator += dt;
 
         while self.time_accumulator >= FIXED_TIMESTEP {
-            self.world.entities.update(dt);
-
+            self.world.entities.update(FIXED_TIMESTEP);
+            
             self.time_accumulator -= FIXED_TIMESTEP;
         }
 
@@ -105,11 +105,25 @@ impl EventHandler for GameRuntime {
             self.camera.pos = self_player.pos;
         }
 
-        // Receive world updates from server
         while let Ok(msg) = self.server_rx.try_recv() {
             match msg {
                 ServerMessage::UpdateEntities(players) => {
-                    self.world.entities = players; // You'll need to implement this
+                    if let Some(self_player) = self.world.entities.players.get(&self.player_id).cloned() {
+                        // Insert or update all players from the server
+                        for (id, player) in players.players.into_iter() {
+                            self.world.entities.players.insert(id, player);
+                        }
+                        // Make sure local player data is preserved (or overwritten by server if needed)
+                        self.world
+                            .entities
+                            .players
+                            .insert(self.player_id, self_player.clone());
+                    } else {
+                        // If local player not yet in world, just insert all server players
+                        for (id, player) in players.players.into_iter() {
+                            self.world.entities.players.insert(id, player);
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -127,6 +141,8 @@ impl EventHandler for GameRuntime {
             vel: Vec2::ZERO,
             username: self.username.clone(),
         };
+
+        self.world.entities.players.insert(self.player_id, player.clone());
 
         let _ = self
             .server_tx
@@ -152,6 +168,8 @@ impl EventHandler for GameRuntime {
             vel: Vec2 { x: vx, y: vy },
             username: self.username.clone(),
         };
+
+        self.world.entities.players.insert(self.player_id, player.clone());
 
         let _ = self
             .server_tx

@@ -18,13 +18,13 @@ rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 
 echo "Building client..."
-cargo build --release --bin "$CLIENT_DIR"
+cargo build --bin "$CLIENT_DIR"
 
 echo "Building server..."
-cargo build --release --bin "$SERVER_DIR"
+cargo build --bin "$SERVER_DIR"
 
 echo "Building launcher..."
-cargo build --release --bin "$LAUNCHER_DIR"
+cargo build --bin "$LAUNCHER_DIR"
 
 # Copy files and create zip for client
 mkdir -p "$OUTPUT_DIR/client/"
@@ -53,4 +53,4 @@ echo "✅ Build and packaging complete. Output in $OUTPUT_DIR"
 
 echo "✅ Launching launcher"
 
-cargo run --release --bin launcher
+cargo run --bin launcher

@@ -14,11 +14,11 @@ use environment::Environment;
 
 /// The main game world that contains the environment and entities (players).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Decode, Encode)]
-pub struct World {
+pub struct GameWorld {
     pub environment: Environment,
     pub entities: Entities,
 }
-impl World {
+impl GameWorld {
     pub fn new() -> Self {
         Self {
             environment: Environment {

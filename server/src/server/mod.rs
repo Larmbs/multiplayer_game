@@ -28,7 +28,7 @@ use tokio::{
 mod handle;
 
 use crate::cli::ServerConfig;
-use common::{message::ServerMessage, world::World};
+use common::{message::ServerMessage, world::GameWorld};
 use handle::ClientHandle;
 
 /// Commands that the server can execute that a handle would otherwise not.
@@ -50,7 +50,7 @@ pub struct Server {
     command_rx: UnboundedReceiver<ServerCommand>,
     command_tx: UnboundedSender<ServerCommand>, // Used for copying to handles
 
-    world: Arc<Mutex<World>>,
+    world: Arc<Mutex<GameWorld>>,
 }
 
 impl Server {
@@ -65,7 +65,7 @@ impl Server {
             command_rx: rx,
             command_tx: tx,
 
-            world: Arc::new(Mutex::new(World::new())),
+            world: Arc::new(Mutex::new(GameWorld::new())),
             player_id_counter: Arc::new(AtomicU64::new(1)),
         })
     }
